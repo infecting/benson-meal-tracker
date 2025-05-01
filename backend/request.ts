@@ -638,6 +638,8 @@ export class MobileOrderClient {
             throw error;
         }
     }
+    
+    //public async rateOrder()...
 
     // Utility Methods
     public async getLocations(): Promise<any> {

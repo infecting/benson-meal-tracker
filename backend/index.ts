@@ -135,6 +135,33 @@ app.post("/getMenu", async (req, res) => {
     }
 });
 
+/*
+app.post("/rateOrder", async (req, res) => { //Allows for rating orders, as scraped from the API, unfinished
+    try {
+        let client = new MobileOrderClient(
+            {
+                baseApiUrl: "https://mobileorderprodapi.transactcampus.com",
+                baseIdpUrl: "https://login.scu.edu",
+                campusId: "4",
+                secretKey: "dFz9Dq435BT3xCVU2PCy",
+            },
+            {
+                userId: req.body.userId,
+                loginToken: req.body.loginToken,
+                sessionId: req.body.sessionId,
+            }
+        );
+        
+        //more code goes here...
+        
+
+    } catch (e) {
+        console.log(e.message);
+        res.json({ error: e.message });
+    }
+});
+*/
+
 // Import connectDB (uncomment when ready to use a database)
 // import connectDB from './config/database';
 
