@@ -3,3 +3,5 @@
 ./backend/node_modules
 ./frontend/node_modules/
 **node_modules
+*.env
+auth0-google-login/.env
