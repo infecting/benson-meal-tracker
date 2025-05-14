@@ -3,21 +3,16 @@ import cors from "cors";
 import { MobileOrderClient } from "./request";
 import { auth, requiresAuth } from "express-openid-connect";
 import dotenv from "dotenv";
+import {
+    cleanMenu,
+    getMostFrequentOrder,
+    getMostFrequentPlace,
+    getOrderDistributionByHour,
+    moneySpent,
+} from "./utils";
 dotenv.config();
 
 // Load environment variables
-const mapping = {
-    "13": "Fire Grill",
-    "6": "Spice Market",
-    "870": "Trattoria",
-    "3": "Slice",
-    "9": "La Parilla",
-    "1633": "Simply Oasis",
-    "534": "Sushi",
-    "1634": "Acai Bowl",
-    "10": "Mission Bakery",
-    "812": "The Chef's Table",
-};
 
 const app: Express = express();
 const port = process.env.PORT || 3000;
@@ -109,6 +104,63 @@ app.post("/getPastOrders", async (req, res) => {
     }
 });
 
+app.post("/order", async (req, res) => {
+    try {
+        let client = new MobileOrderClient(
+            {
+                baseApiUrl: "https://mobileorderprodapi.transactcampus.com",
+                baseIdpUrl: "https://login.scu.edu",
+                campusId: "4",
+                secretKey: "dFz9Dq435BT3xCVU2PCy",
+            },
+            {
+                userId: req.body.userId,
+                loginToken: req.body.loginToken,
+                sessionId: req.body.sessionId,
+            }
+        );
+        const calculatedCart = await client.calculateCart(
+            req.body.cartItems,
+            req.body.locationId
+        );
+        const orderCart = {
+            ...calculatedCart.cartData,
+            grand_total: req.body.total, // 385 for 3.85 etc
+            pickup_time_max: "12",
+            pickup_time_min: "10",
+            subtotal: req.body.total, // 385 for 3.85 etc
+            checkout_select_choiceids: ["782"],
+        };
+        const orderId = await client.processOrder(orderCart);
+        res.json({ orderId: orderId });
+    } catch (e) {
+        console.error(e);
+    }
+});
+
+app.post("/orderStatus", async (req, res) => {
+    try {
+        let client = new MobileOrderClient(
+            {
+                baseApiUrl: "https://mobileorderprodapi.transactcampus.com",
+                baseIdpUrl: "https://login.scu.edu",
+                campusId: "4",
+                secretKey: "dFz9Dq435BT3xCVU2PCy",
+            },
+            {
+                userId: req.body.userId,
+                loginToken: req.body.loginToken,
+                sessionId: req.body.sessionId,
+            }
+        );
+        // some kind of polling
+        const r = await client.checkOrderStatus(req.body.orderId);
+        res.json(r);
+    } catch (e) {
+        console.error(e);
+    }
+});
+
 app.post("/getWrapped", async (req, res) => {
     try {
         let client = new MobileOrderClient(
@@ -126,23 +178,16 @@ app.post("/getWrapped", async (req, res) => {
         );
         const pastOrders = await client.getPastOrders();
         console.log(pastOrders);
-        const mostFrequent = { "1": 0 };
-        for (let order of pastOrders.orders) {
-            if (mostFrequent[order.locationid]) {
-                mostFrequent[order.locationid] =
-                    mostFrequent[order.locationid] + 1;
-            } else {
-                mostFrequent[order.locationid] = 1;
-            }
-        }
-        let x = {};
-        for (let key in mostFrequent) {
-            if (mapping[key]) {
-                x[mapping[key]] = mostFrequent[key];
-            }
-        }
-        console.log(mostFrequent);
-        res.json(x);
+        let frequentPlace = getMostFrequentPlace(pastOrders);
+        let frequentOrder = getMostFrequentOrder(pastOrders);
+        let money = moneySpent(pastOrders);
+        let frequentHours = getOrderDistributionByHour(pastOrders);
+        res.json({
+            place: frequentPlace,
+            order: frequentOrder,
+            money: money / 100,
+            hours: frequentHours,
+        });
     } catch (e) {
         console.log(e.message);
         res.json({ error: e.message });
@@ -166,7 +211,8 @@ app.post("/getMenu", async (req, res) => {
         );
         const menuResponse = await client.getMenuForLocation("" + req.query.l);
         console.log(menuResponse);
-        res.json(menuResponse);
+        const finalMenu = cleanMenu(menuResponse);
+        res.json(finalMenu);
     } catch (e) {
         console.log(e.message);
         res.json({ error: e.message });

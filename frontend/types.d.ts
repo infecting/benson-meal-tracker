@@ -30,11 +30,8 @@ interface WrappedStat {
 }
 
 interface DiningWrappedData {
-    totalSpent: number;
-    mostFrequentLocation: string;
-    favoriteItem: string; // Simplified
-    peakSpendingTime: string; // e.g., "Lunch Rush (12-1 PM)"
-    totalOrders: number;
-    uniqueItemsTried: number;
-    stats: WrappedStat[];
+    money: number;
+    place: string;
+    order: string;
+    hour: string;
 }
