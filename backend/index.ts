@@ -3,6 +3,7 @@ import cors from "cors";
 import { MobileOrderClient } from "./request";
 import { auth, requiresAuth } from "express-openid-connect";
 import dotenv from "dotenv";
+import mongoose from "mongoose";
 import {
     cleanMenu,
     getMostFrequentOrder,
@@ -12,7 +13,61 @@ import {
 } from "./utils";
 dotenv.config();
 
-// Load environment variables
+// MongoDB Connection
+const connectDB = async () => {
+    try {
+        const conn = await mongoose.connect(process.env.MONGODB_URI!);
+        console.log(`MongoDB Connected: ${conn.connection.host}`);
+    } catch (error) {
+        console.error(`Error: ${error.message}`);
+        process.exit(1);
+    }
+};
+
+// Define Schemas
+const scheduleOrderSchema = new mongoose.Schema({
+    userId: { type: String, required: true },
+    userEmail: { type: String, required: true },
+    locationId: { type: String, required: true },
+    locationName: { type: String, required: true },
+    items: [
+        {
+            itemId: String,
+            name: String,
+            price: Number,
+            quantity: Number,
+            options: [{ name: String, value: String }],
+        },
+    ],
+    scheduledTime: { type: Date, required: true },
+    createdAt: { type: Date, default: Date.now },
+    status: { type: String, default: "scheduled" }, // scheduled, processing, completed, cancelled
+    notes: { type: String },
+});
+
+const requestItemSchema = new mongoose.Schema({
+    userId: { type: String, required: true },
+    userEmail: { type: String, required: true },
+    itemName: { type: String, required: true },
+    locationId: { type: String },
+    locationName: { type: String },
+    description: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+    status: { type: String, default: "pending" }, // pending, approved, rejected
+    upvotes: { type: Number, default: 0 },
+    comments: [
+        {
+            userId: String,
+            userEmail: String,
+            text: String,
+            createdAt: { type: Date, default: Date.now },
+        },
+    ],
+});
+
+// Create models
+const ScheduleOrder = mongoose.model("ScheduleOrder", scheduleOrderSchema);
+const RequestItem = mongoose.model("RequestItem", requestItemSchema);
 
 const app: Express = express();
 const port = process.env.PORT || 3000;
@@ -45,6 +100,19 @@ const config = {
 // Attach Auth0 routes
 app.use(auth(config));
 
+// Authentication check middleware
+const checkAuthentication = (req, res, next) => {
+    if (!req.oidc.isAuthenticated()) {
+        return res.status(401).json({ error: "Authentication required" });
+    }
+    next();
+};
+
+// Helper to validate SCU user token
+const validateSCUToken = (req) => {
+    return req.body.userId && req.body.loginToken && req.body.sessionId;
+};
+
 // Home route
 app.get("/", (req, res) => {
     res.send(
@@ -59,7 +127,189 @@ app.get("/profile", requiresAuth(), (req, res) => {
     res.send(`<pre>${JSON.stringify(req.oidc.user, null, 2)}</pre>`);
 });
 
-// Use API routes
+app.post("/scheduleOrder", checkAuthentication, async (req, res) => {
+    try {
+        // Validate required fields
+        const {
+            locationId,
+            locationName,
+            items,
+            scheduledTime,
+            notes,
+        } = req.body;
+
+        if (!locationId || !items || !scheduledTime) {
+            return res.status(400).json({
+                error:
+                    "Missing required fields: locationId, items, and scheduledTime are required",
+            });
+        }
+
+        // Validate SCU credentials
+        if (!validateSCUToken(req)) {
+            return res.status(400).json({
+                error: "SCU login credentials required",
+            });
+        }
+
+        // Create the schedule order
+        const newScheduledOrder = new ScheduleOrder({
+            userId: req.body.userId,
+            userEmail: req.oidc.user.email,
+            locationId,
+            locationName,
+            items,
+            scheduledTime: new Date(scheduledTime),
+            notes: notes || "",
+        });
+
+        // Save to database
+        const savedOrder = await newScheduledOrder.save();
+
+        // Return the order with ID for frontend reference
+        res.status(201).json({
+            message: "Order scheduled successfully",
+            id: savedOrder._id,
+            scheduledOrder: savedOrder,
+        });
+    } catch (error) {
+        console.error("Error scheduling order:", error);
+        res.status(500).json({
+            error: "Failed to schedule order",
+            details: error.message,
+        });
+    }
+});
+
+app.post("/requestItem", checkAuthentication, async (req, res) => {
+    try {
+        // Validate required fields
+        const { itemName, description, locationId, locationName } = req.body;
+
+        if (!itemName || !description) {
+            return res.status(400).json({
+                error:
+                    "Missing required fields: itemName and description are required",
+            });
+        }
+
+        // Validate SCU credentials
+        if (!validateSCUToken(req)) {
+            return res.status(400).json({
+                error: "SCU login credentials required",
+            });
+        }
+
+        // Create the item request
+        const newRequestItem = new RequestItem({
+            userId: req.body.userId,
+            userEmail: req.oidc.user.email,
+            itemName,
+            locationId: locationId || null,
+            locationName: locationName || null,
+            description,
+        });
+
+        // Save to database
+        const savedRequest = await newRequestItem.save();
+
+        // Return the request with ID for frontend reference
+        res.status(201).json({
+            message: "Item request submitted successfully",
+            id: savedRequest._id,
+            itemRequest: savedRequest,
+        });
+    } catch (error) {
+        console.error("Error requesting item:", error);
+        res.status(500).json({
+            error: "Failed to submit item request",
+            details: error.message,
+        });
+    }
+});
+
+// Get scheduled orders for current user
+app.get("/myScheduledOrders", checkAuthentication, async (req, res) => {
+    try {
+        if (!validateSCUToken(req)) {
+            return res
+                .status(400)
+                .json({ error: "SCU login credentials required" });
+        }
+
+        const orders = await ScheduleOrder.find({
+            userId: req.body.userId,
+        }).sort({ scheduledTime: -1 });
+
+        res.json(orders);
+    } catch (error) {
+        console.error("Error fetching scheduled orders:", error);
+        res.status(500).json({ error: "Failed to fetch scheduled orders" });
+    }
+});
+
+// Get item requests for current user
+app.get("/myItemRequests", checkAuthentication, async (req, res) => {
+    try {
+        if (!validateSCUToken(req)) {
+            return res
+                .status(400)
+                .json({ error: "SCU login credentials required" });
+        }
+
+        const requests = await RequestItem.find({
+            userId: req.body.userId,
+        }).sort({ createdAt: -1 });
+
+        res.json(requests);
+    } catch (error) {
+        console.error("Error fetching item requests:", error);
+        res.status(500).json({ error: "Failed to fetch item requests" });
+    }
+});
+
+// Get all public item requests (for voting)
+app.get("/publicItemRequests", async (req, res) => {
+    try {
+        const requests = await RequestItem.find()
+            .sort({ upvotes: -1, createdAt: -1 })
+            .limit(50);
+
+        res.json(requests);
+    } catch (error) {
+        console.error("Error fetching public item requests:", error);
+        res.status(500).json({ error: "Failed to fetch public item requests" });
+    }
+});
+
+// Upvote an item request
+app.post(
+    "/upvoteItemRequest/:requestId",
+    checkAuthentication,
+    async (req, res) => {
+        try {
+            const request = await RequestItem.findById(req.params.requestId);
+
+            if (!request) {
+                return res
+                    .status(404)
+                    .json({ error: "Item request not found" });
+            }
+
+            request.upvotes += 1;
+            await request.save();
+
+            res.json({
+                message: "Upvote successful",
+                upvotes: request.upvotes,
+            });
+        } catch (error) {
+            console.error("Error upvoting request:", error);
+            res.status(500).json({ error: "Failed to upvote request" });
+        }
+    }
+);
+
 app.post("/mobileOrder/login", async (req, res) => {
     try {
         let client = new MobileOrderClient(
@@ -219,10 +469,28 @@ app.post("/getMenu", async (req, res) => {
     }
 });
 
-// Import connectDB (uncomment when ready to use a database)
-// import connectDB from './config/database';
+// Connect to MongoDB and start server
+const startServer = async () => {
+    try {
+        // Set MongoDB URI
+        process.env.MONGODB_URI =
+            process.env.MONGODB_URI ||
+            "mongodb+srv://<db_username>:<db_password>@benson.0y9twrp.mongodb.net/?retryWrites=true&w=majority&appName=Benson";
 
-// Start server
-app.listen(port, () => {
-    console.log(`⚡️[server]: Server is running at http://localhost:${port}`);
-});
+        // Connect to MongoDB first
+        await connectDB();
+
+        // Then start Express server
+        app.listen(port, () => {
+            console.log(
+                `⚡️[server]: Server is running at http://localhost:${port}`
+            );
+            console.log(`⚡️[server]: MongoDB connected`);
+        });
+    } catch (error) {
+        console.error("Failed to start server:", error);
+        process.exit(1);
+    }
+};
+
+startServer();

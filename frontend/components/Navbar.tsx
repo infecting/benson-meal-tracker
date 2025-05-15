@@ -1,9 +1,15 @@
+"use client";
+
 import { CalendarCheck, LogOut, Settings, ShoppingCart, TrendingUp, Utensils } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation"; // Use next/navigation in app router
+import { useState } from "react";
 
 export const Navbar = ({ currentPath = "/" }) => {
     // Use the currentPath prop passed from the layout
     const pathname = currentPath;
+    const router = useRouter();
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     const navItems = [
         { name: 'Order', path: '/menu', icon: <CalendarCheck size={20} /> },
@@ -13,6 +19,32 @@ export const Navbar = ({ currentPath = "/" }) => {
 
     const isActive = (path) => {
         return pathname === path || pathname?.startsWith(`${path}/`);
+    };
+
+    const handleLogout = async (e) => {
+        e.preventDefault();
+        setIsLoggingOut(true);
+
+        try {
+            // Clear localStorage userData
+            localStorage.removeItem('userData');
+
+            // Make request to logout endpoint
+            await fetch('http://localhost:3000/logout', {
+                method: 'GET',
+                credentials: 'include', // Important for sending cookies if using sessions
+            });
+
+            // Redirect to login page or home page after logout
+            router.push('/login');
+        } catch (error) {
+            console.error('Logout error:', error);
+            // Even if the server request fails, still clear local data
+            localStorage.removeItem('userData');
+            router.push('/login');
+        } finally {
+            setIsLoggingOut(false);
+        }
     };
 
     return (
@@ -41,13 +73,14 @@ export const Navbar = ({ currentPath = "/" }) => {
                     <Settings size={20} />
                     <span>Settings</span>
                 </Link>
-                <Link
-                    href="/logout"
+                <button
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
                     className="w-full flex items-center space-x-3 p-3 rounded-lg text-left text-gray-300 hover:bg-gray-700 transition-colors"
                 >
                     <LogOut size={20} />
-                    <span>Logout</span>
-                </Link>
+                    <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+                </button>
             </div>
         </nav>
     );

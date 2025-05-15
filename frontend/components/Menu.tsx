@@ -118,7 +118,9 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
     const MAX_RETRIES = 3;
     const RETRY_DELAY = 3000; // 3 seconds
 
-    // Memoize fetchMenuItems to prevent recreation on every render
+    // Add this after fetchMenuItems in your RestaurantMenu component
+
+    // Modify the fetchMenuItems function to handle empty menu items
     const fetchMenuItems = useCallback(async () => {
         try {
             setIsLoading(true);
@@ -138,7 +140,15 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
                 }
             );
 
-            setMenuItems(response.data);
+            // Check if the response data is an empty array or doesn't exist
+            if (!response.data || response.data.length === 0) {
+                setError('No menu items available for this location. The restaurant may be closed or updating their menu.');
+                setMenuItems([]);
+            } else {
+                setMenuItems(response.data);
+                setError(''); // Clear any previous errors
+            }
+
             setIsLoading(false);
             setFetchFailed(false);
             setRetryCount(0); // Reset retry count on successful fetch
@@ -177,6 +187,8 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
             }
         }
     }, [restaurantId, user, retryCount]);
+
+
 
     useEffect(() => {
         // Try to get user data from localStorage on component mount
@@ -641,7 +653,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
 
             {/* Menu Items Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {menuItems.map((item) => (
+                {Array.isArray(menuItems) && menuItems.map((item) => (
                     <motion.div
                         key={item.id}
                         initial={{ opacity: 0, y: 20 }}
