@@ -115,7 +115,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
             setIsLoading(true);
             // Replace with your actual API endpoint
             const response = await axios.post<MenuItem[]>(
-                `http://localhost:3000/getMenu?l=${restaurantId}`,
+                `${process.env.requestUrl}/getMenu?l=${restaurantId}`,
                 {
                     "userId": user?.token.userId,
                     "sessionId": user?.token.sessionId,

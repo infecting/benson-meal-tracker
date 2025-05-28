@@ -73,7 +73,7 @@ const WrappedPage: React.FC = () => {
                     console.log(user)
                     try {
                         const response = await axios.post<DiningWrappedData>(
-                            "http://localhost:3000/getWrapped",
+                            `${process.env.requestUrl}/getWrapped`,
                             {
                                 userId: user.token.userId,
                                 sessionId: user.token.sessionId,
