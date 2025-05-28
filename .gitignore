@@ -2,6 +2,8 @@
 ./backend/package-lock.json
 ./backend/node_modules
 ./frontend/node_modules/
+./backend/dist/
+./backend/dist
 **node_modules
 *.env
 auth0-google-login/.env

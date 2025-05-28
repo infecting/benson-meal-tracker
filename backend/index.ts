@@ -1,4 +1,4 @@
-import express, { Express, Request, Response } from "express";
+import express, { Express, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { MobileOrderClient } from "./request";
 import { auth, requiresAuth } from "express-openid-connect";
@@ -20,7 +20,7 @@ const connectDB = async () => {
         const conn = await mongoose.connect(process.env.MONGODB_URI!);
         console.log(`MongoDB Connected: ${conn.connection.host}`);
     } catch (error) {
-        console.error(`Error: ${error.message}`);
+        console.error(`Error: ${(error as Error).message}`);
         process.exit(1);
     }
 };
@@ -78,11 +78,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Simple root route
-app.get("/", (req: Request, res: Response) => {
-    res.send("Express + TypeScript Server is running");
-});
-
 const config = {
     authRequired: false,
     auth0Logout: true,
@@ -101,176 +96,208 @@ const config = {
 // Attach Auth0 routes
 app.use(auth(config));
 
-// Authentication check middleware
-const checkAuthentication = (req, res, next) => {
-    if (!req.oidc.isAuthenticated()) {
-        return res.status(401).json({ error: "Authentication required" });
+// Authentication check middleware - FIXED VERSION
+const checkAuthentication = (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): void => {
+    if (!(req as any).oidc.isAuthenticated()) {
+        res.status(401).json({ error: "Authentication required" });
+        return; // Important: return here to prevent calling next()
     }
     next();
 };
 
 // Helper to validate SCU user token
-const validateSCUToken = (req) => {
-    return req.body.userId && req.body.loginToken && req.body.sessionId;
+const validateSCUToken = (req: Request): boolean => {
+    return !!(req.body.userId && req.body.loginToken && req.body.sessionId);
 };
 
 // Home route
-app.get("/", (req, res) => {
+app.get("/", (req: Request, res: Response) => {
+    const oidcReq = req as any; // Type assertion for oidc properties
     res.send(
-        req.oidc.isAuthenticated()
-            ? `Logged in as ${req.oidc.user?.name} <a href="/logout">Logout</a>`
+        oidcReq.oidc.isAuthenticated()
+            ? `Logged in as ${oidcReq.oidc.user?.name} <a href="/logout">Logout</a>`
             : `Not logged in. <a href="/login">Login</a>`
     );
 });
 
 // Protected route
-app.get("/profile", requiresAuth(), (req, res) => {
-    res.send(`<pre>${JSON.stringify(req.oidc.user, null, 2)}</pre>`);
+app.get("/profile", requiresAuth(), (req: Request, res: Response) => {
+    const oidcReq = req as any;
+    res.send(`<pre>${JSON.stringify(oidcReq.oidc.user, null, 2)}</pre>`);
 });
 
-app.post("/scheduleOrder", checkAuthentication, async (req, res) => {
-    try {
-        // Validate required fields
-        const {
-            locationId,
-            locationName,
-            items,
-            scheduledTime,
-            notes,
-        } = req.body;
+app.post(
+    "/scheduleOrder",
+    checkAuthentication,
+    async (req: Request, res: Response) => {
+        try {
+            // Validate required fields
+            const {
+                locationId,
+                locationName,
+                items,
+                scheduledTime,
+                notes,
+            } = req.body;
 
-        if (!locationId || !items || !scheduledTime) {
-            return res.status(400).json({
-                error:
-                    "Missing required fields: locationId, items, and scheduledTime are required",
+            if (!locationId || !items || !scheduledTime) {
+                res.status(400).json({
+                    error:
+                        "Missing required fields: locationId, items, and scheduledTime are required",
+                });
+            }
+
+            // Validate SCU credentials
+            if (!validateSCUToken(req)) {
+                res.status(400).json({
+                    error: "SCU login credentials required",
+                });
+            }
+
+            const oidcReq = req as any;
+
+            // Create the schedule order
+            const newScheduledOrder = new ScheduleOrder({
+                userId: req.body.userId,
+                userEmail: oidcReq.oidc.user.email,
+                locationId,
+                locationName,
+                items,
+                scheduledTime: new Date(scheduledTime),
+                notes: notes || "",
+            });
+
+            // Save to database
+            const savedOrder = await newScheduledOrder.save();
+
+            // Return the order with ID for frontend reference
+            res.status(201).json({
+                message: "Order scheduled successfully",
+                id: savedOrder._id,
+                scheduledOrder: savedOrder,
+            });
+        } catch (error) {
+            console.error("Error scheduling order:", error);
+            res.status(500).json({
+                error: "Failed to schedule order",
+                details: (error as Error).message,
             });
         }
-
-        // Validate SCU credentials
-        if (!validateSCUToken(req)) {
-            return res.status(400).json({
-                error: "SCU login credentials required",
-            });
-        }
-
-        // Create the schedule order
-        const newScheduledOrder = new ScheduleOrder({
-            userId: req.body.userId,
-            userEmail: req.oidc.user.email,
-            locationId,
-            locationName,
-            items,
-            scheduledTime: new Date(scheduledTime),
-            notes: notes || "",
-        });
-
-        // Save to database
-        const savedOrder = await newScheduledOrder.save();
-
-        // Return the order with ID for frontend reference
-        res.status(201).json({
-            message: "Order scheduled successfully",
-            id: savedOrder._id,
-            scheduledOrder: savedOrder,
-        });
-    } catch (error) {
-        console.error("Error scheduling order:", error);
-        res.status(500).json({
-            error: "Failed to schedule order",
-            details: error.message,
-        });
     }
-});
+);
 
-app.post("/requestItem", checkAuthentication, async (req, res) => {
-    try {
-        // Validate required fields
-        const { itemName, description, locationId, locationName } = req.body;
+app.post(
+    "/requestItem",
+    checkAuthentication,
+    async (req: Request, res: Response) => {
+        try {
+            // Validate required fields
+            const {
+                itemName,
+                description,
+                locationId,
+                locationName,
+            } = req.body;
 
-        if (!itemName || !description) {
-            return res.status(400).json({
-                error:
-                    "Missing required fields: itemName and description are required",
+            if (!itemName || !description) {
+                res.status(400).json({
+                    error:
+                        "Missing required fields: itemName and description are required",
+                });
+            }
+
+            // Validate SCU credentials
+            if (!validateSCUToken(req)) {
+                res.status(400).json({
+                    error: "SCU login credentials required",
+                });
+            }
+
+            const oidcReq = req as any;
+
+            // Create the item request
+            const newRequestItem = new RequestItem({
+                userId: req.body.userId,
+                userEmail: oidcReq.oidc.user.email,
+                itemName,
+                locationId: locationId || null,
+                locationName: locationName || null,
+                description,
+            });
+
+            // Save to database
+            const savedRequest = await newRequestItem.save();
+
+            // Return the request with ID for frontend reference
+            res.status(201).json({
+                message: "Item request submitted successfully",
+                id: savedRequest._id,
+                itemRequest: savedRequest,
+            });
+        } catch (error) {
+            console.error("Error requesting item:", error);
+            res.status(500).json({
+                error: "Failed to submit item request",
+                details: (error as Error).message,
             });
         }
-
-        // Validate SCU credentials
-        if (!validateSCUToken(req)) {
-            return res.status(400).json({
-                error: "SCU login credentials required",
-            });
-        }
-
-        // Create the item request
-        const newRequestItem = new RequestItem({
-            userId: req.body.userId,
-            userEmail: req.oidc.user.email,
-            itemName,
-            locationId: locationId || null,
-            locationName: locationName || null,
-            description,
-        });
-
-        // Save to database
-        const savedRequest = await newRequestItem.save();
-
-        // Return the request with ID for frontend reference
-        res.status(201).json({
-            message: "Item request submitted successfully",
-            id: savedRequest._id,
-            itemRequest: savedRequest,
-        });
-    } catch (error) {
-        console.error("Error requesting item:", error);
-        res.status(500).json({
-            error: "Failed to submit item request",
-            details: error.message,
-        });
     }
-});
+);
 
 // Get scheduled orders for current user
-app.get("/myScheduledOrders", checkAuthentication, async (req, res) => {
-    try {
-        if (!validateSCUToken(req)) {
-            return res
-                .status(400)
-                .json({ error: "SCU login credentials required" });
+app.get(
+    "/myScheduledOrders",
+    checkAuthentication,
+    async (req: Request, res: Response) => {
+        try {
+            if (!validateSCUToken(req)) {
+                res.status(400).json({
+                    error: "SCU login credentials required",
+                });
+            }
+
+            const orders = await ScheduleOrder.find({
+                userId: req.body.userId,
+            }).sort({ scheduledTime: -1 });
+
+            res.json(orders);
+        } catch (error) {
+            console.error("Error fetching scheduled orders:", error);
+            res.status(500).json({ error: "Failed to fetch scheduled orders" });
         }
-
-        const orders = await ScheduleOrder.find({
-            userId: req.body.userId,
-        }).sort({ scheduledTime: -1 });
-
-        res.json(orders);
-    } catch (error) {
-        console.error("Error fetching scheduled orders:", error);
-        res.status(500).json({ error: "Failed to fetch scheduled orders" });
     }
-});
+);
 
 // Get item requests for current user
-app.get("/myItemRequests", checkAuthentication, async (req, res) => {
-    try {
-        if (!validateSCUToken(req)) {
-            return res
-                .status(400)
-                .json({ error: "SCU login credentials required" });
+app.get(
+    "/myItemRequests",
+    checkAuthentication,
+    async (req: Request, res: Response) => {
+        try {
+            if (!validateSCUToken(req)) {
+                res.status(400).json({
+                    error: "SCU login credentials required",
+                });
+            }
+
+            const requests = await RequestItem.find({
+                userId: req.body.userId,
+            }).sort({ createdAt: -1 });
+
+            res.json(requests);
+        } catch (error) {
+            console.error("Error fetching item requests:", error);
+            res.status(500).json({ error: "Failed to fetch item requests" });
         }
-
-        const requests = await RequestItem.find({
-            userId: req.body.userId,
-        }).sort({ createdAt: -1 });
-
-        res.json(requests);
-    } catch (error) {
-        console.error("Error fetching item requests:", error);
-        res.status(500).json({ error: "Failed to fetch item requests" });
     }
-});
+);
 
 // Get all public item requests (for voting)
-app.get("/publicItemRequests", async (req, res) => {
+app.get("/publicItemRequests", async (req: Request, res: Response) => {
     try {
         const requests = await RequestItem.find()
             .sort({ upvotes: -1, createdAt: -1 })
@@ -287,14 +314,12 @@ app.get("/publicItemRequests", async (req, res) => {
 app.post(
     "/upvoteItemRequest/:requestId",
     checkAuthentication,
-    async (req, res) => {
+    async (req: Request, res: Response) => {
         try {
             const request = await RequestItem.findById(req.params.requestId);
 
             if (!request) {
-                return res
-                    .status(404)
-                    .json({ error: "Item request not found" });
+                res.status(404).json({ error: "Item request not found" });
             }
 
             request.upvotes += 1;
@@ -311,7 +336,7 @@ app.post(
     }
 );
 
-app.post("/mobileOrder/login", async (req, res) => {
+app.post("/mobileOrder/login", async (req: Request, res: Response) => {
     try {
         let client = new MobileOrderClient(
             { username: req.body.username, password: req.body.password },
@@ -326,12 +351,12 @@ app.post("/mobileOrder/login", async (req, res) => {
         console.log(loginResp);
         res.json({ token: loginResp });
     } catch (e) {
-        console.log(e.message);
-        res.json({ error: e.message });
+        console.log((e as Error).message);
+        res.json({ error: (e as Error).message });
     }
 });
 
-app.post("/getPastOrders", async (req, res) => {
+app.post("/getPastOrders", async (req: Request, res: Response) => {
     try {
         let client = new MobileOrderClient(
             {
@@ -350,12 +375,12 @@ app.post("/getPastOrders", async (req, res) => {
         console.log(pastOrders);
         res.json(pastOrders);
     } catch (e) {
-        console.log(e.message);
-        res.json({ error: e.message });
+        console.log((e as Error).message);
+        res.json({ error: (e as Error).message });
     }
 });
 
-app.post("/order", async (req, res) => {
+app.post("/order", async (req: Request, res: Response) => {
     try {
         let client = new MobileOrderClient(
             {
@@ -386,10 +411,11 @@ app.post("/order", async (req, res) => {
         res.json({ orderId: orderId });
     } catch (e) {
         console.error(e);
+        res.status(500).json({ error: "Failed to process order" });
     }
 });
 
-app.post("/orderStatus", async (req, res) => {
+app.post("/orderStatus", async (req: Request, res: Response) => {
     try {
         let client = new MobileOrderClient(
             {
@@ -409,10 +435,11 @@ app.post("/orderStatus", async (req, res) => {
         res.json(r);
     } catch (e) {
         console.error(e);
+        res.status(500).json({ error: "Failed to check order status" });
     }
 });
 
-app.post("/getWrapped", async (req, res) => {
+app.post("/getWrapped", async (req: Request, res: Response) => {
     try {
         let client = new MobileOrderClient(
             {
@@ -442,12 +469,12 @@ app.post("/getWrapped", async (req, res) => {
             hours: frequentHours,
         });
     } catch (e) {
-        console.log(e.message);
-        res.json({ error: e.message });
+        console.log((e as Error).message);
+        res.json({ error: (e as Error).message });
     }
 });
 
-app.post("/getMenu", async (req, res) => {
+app.post("/getMenu", async (req: Request, res: Response) => {
     try {
         let client = new MobileOrderClient(
             {
@@ -467,8 +494,8 @@ app.post("/getMenu", async (req, res) => {
         const finalMenu = cleanMenu(menuResponse);
         res.json(finalMenu);
     } catch (e) {
-        console.log(e.message);
-        res.json({ error: e.message });
+        console.log((e as Error).message);
+        res.json({ error: (e as Error).message });
     }
 });
 
