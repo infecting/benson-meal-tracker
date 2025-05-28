@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import {
     cleanMenu,
+    getLocationDistribution,
     getMostFrequentOrder,
     getMostFrequentPlace,
     getOrderDistributionByHour,
@@ -432,8 +433,10 @@ app.post("/getWrapped", async (req, res) => {
         let frequentOrder = getMostFrequentOrder(pastOrders);
         let money = moneySpent(pastOrders);
         let frequentHours = getOrderDistributionByHour(pastOrders);
+        let placeDist = getLocationDistribution(pastOrders);
         res.json({
-            place: frequentPlace,
+            place: frequentPlace.most,
+            placeDist: placeDist,
             order: frequentOrder,
             money: money / 100,
             hours: frequentHours,

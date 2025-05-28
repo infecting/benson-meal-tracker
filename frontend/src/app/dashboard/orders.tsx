@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { mockOrdersAPI } from "../../../api/orders";
 import { ScheduledOrderItem } from "../../../components/ScheduledOrderItem";
 import "../src/app/globals.css"
 export const MyOrdersPage: React.FC = () => {
@@ -12,8 +11,9 @@ export const MyOrdersPage: React.FC = () => {
             try {
                 setLoading(true);
                 setError(null);
-                const fetchedOrders = await mockOrdersAPI.getScheduledOrders();
-                setOrders(fetchedOrders.sort((a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()));
+                const fetchedOrders = [];
+                setOrders(fetchedOrders);
+                // setOrders(fetchedOrders.sort((a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()));
             } catch (err) {
                 setError("Failed to load orders.");
                 console.error(err);

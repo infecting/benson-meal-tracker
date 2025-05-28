@@ -9,9 +9,12 @@ const mapping = {
     "1634": "Acai Bowl",
     "10": "Mission Bakery",
     "812": "The Chef's Table",
+    "8": "Global Grill",
+    "12": "Sunstream",
+    "1364": "Fresh Bytes",
 };
 
-export function getMostFrequentPlace(pastOrders: any): string {
+export function getMostFrequentPlace(pastOrders: any) {
     const mostFrequent: Record<string, number> = {};
     let maxCount = 0;
     let mostFrequentLocationId = "";
@@ -33,8 +36,44 @@ export function getMostFrequentPlace(pastOrders: any): string {
     }
 
     // Return the mapped name of the most frequent location
-    return mapping[mostFrequentLocationId] || "";
+    return { most: mapping[mostFrequentLocationId], m: mapping };
 }
+
+export function getLocationDistribution(
+    pastOrders: any
+): Record<string, number> {
+    // Create a map to count frequency of each location
+    const locationCounts: Record<string, number> = {};
+
+    // Process all orders and count occurrences
+    for (let order of pastOrders.orders) {
+        if (order.locationid) {
+            // Get the location name from mapping, or use the ID if not found
+            const locationName = mapping[order.locationid] || order.locationid;
+
+            // Increment the count for this location
+            if (locationCounts[locationName]) {
+                locationCounts[locationName] += 1;
+            } else {
+                locationCounts[locationName] = 1;
+            }
+        }
+    }
+
+    // Sort the results by count in descending order
+    const sortedEntries = Object.entries(locationCounts).sort(
+        (a, b) => b[1] - a[1]
+    );
+
+    // Convert back to an object with the sorted entries
+    const sortedCounts: Record<string, number> = {};
+    for (const [location, count] of sortedEntries) {
+        sortedCounts[location] = count;
+    }
+
+    return sortedCounts;
+}
+
 export function getMostFrequentOrder(pastOrders: any): string {
     const mostFrequent: Record<string, number> = {};
     let maxCount = 0;

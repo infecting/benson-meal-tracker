@@ -22,7 +22,7 @@ const restaurantMapping: Record<string, string> = {
 
 // Mock types from the component
 interface MenuItem {
-    id: string;
+    id: number;
     name: string;
     description: string;
     price: number;

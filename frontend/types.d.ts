@@ -28,10 +28,3 @@ interface WrappedStat {
     description?: string;
     icon?: React.ReactNode;
 }
-
-interface DiningWrappedData {
-    money: number;
-    place: string;
-    order: string;
-    hour: string;
-}

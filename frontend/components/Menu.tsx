@@ -1,8 +1,11 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import "../src/app/globals.css"
 import LoginMenu from './LoginModal';
+import Image from 'next/image';
 
 // Define the types for our menu data
 interface MenuItem {
@@ -24,21 +27,7 @@ interface OptionVal {
     valueId: number;
 }
 
-interface CartItem {
-    itemid: number;
-    sectionid: number;
-    upsell_upsellid: number;
-    upsell_variantid: number;
-    options: {
-        optionid: number;
-        values: {
-            valueid: number;
-            combo_itemid: number;
-            combo_items: any[];
-        }[];
-    }[];
-    meal_ex_applied: boolean;
-}
+
 
 interface ScheduleOptions {
     isScheduled: boolean;
@@ -197,6 +186,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
             try {
                 setUser(JSON.parse(savedUserData));
             } catch (e) {
+                console.error(e)
                 // Invalid data in localStorage, clear it
                 localStorage.removeItem('userData');
             }
@@ -663,7 +653,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
                     >
                         {item.imageUrl && (
                             <div className="h-48 overflow-hidden">
-                                <img
+                                <Image
                                     src={item.imageUrl}
                                     alt={item.name}
                                     className="w-full h-full object-cover"

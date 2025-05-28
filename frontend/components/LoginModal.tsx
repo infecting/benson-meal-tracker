@@ -8,10 +8,12 @@ interface LoginProps {
 }
 
 interface UserData {
-    userId: number;
-    sessionId: string;
-    loginToken: string;
-    name: string;
+    token: {
+        userId: number;
+        sessionId: string;
+        loginToken: string;
+        name: string;
+    }
 }
 
 const LoginMenu: React.FC<LoginProps> = ({ onLoginSuccess, onClose }) => {
@@ -44,7 +46,7 @@ const LoginMenu: React.FC<LoginProps> = ({ onLoginSuccess, onClose }) => {
             // Handle successful login
             onLoginSuccess(response.data);
 
-        } catch (err: any) {
+        } catch (err) {
             setError(err.response?.data?.message || 'Login failed. Please check your SCU credentials.');
         } finally {
             setIsLoading(false);
@@ -70,7 +72,7 @@ const LoginMenu: React.FC<LoginProps> = ({ onLoginSuccess, onClose }) => {
 
             setResetSent(true);
 
-        } catch (err: any) {
+        } catch (err) {
             setError(err.response?.data?.message || 'Failed to send reset link. Please try again.');
         } finally {
             setIsLoading(false);
@@ -147,8 +149,8 @@ const LoginMenu: React.FC<LoginProps> = ({ onLoginSuccess, onClose }) => {
                                 type="submit"
                                 disabled={isLoading}
                                 className={`w-full py-2 px-4 rounded font-medium ${isLoading
-                                        ? 'bg-blue-400 cursor-not-allowed'
-                                        : 'bg-blue-600 hover:bg-blue-700'
+                                    ? 'bg-blue-400 cursor-not-allowed'
+                                    : 'bg-blue-600 hover:bg-blue-700'
                                     } text-white transition-colors`}
                             >
                                 {isLoading ? (
@@ -177,7 +179,7 @@ const LoginMenu: React.FC<LoginProps> = ({ onLoginSuccess, onClose }) => {
                             </div>
                             <h3 className="text-lg font-medium text-gray-900 mb-2">Reset Link Sent</h3>
                             <p className="text-gray-600 mb-4">
-                                We've sent a password reset link to your SCU email address. Please check your inbox.
+                                We&aposve sent a password reset link to your SCU email address. Please check your inbox.
                             </p>
                             <button
                                 onClick={() => {
@@ -212,8 +214,8 @@ const LoginMenu: React.FC<LoginProps> = ({ onLoginSuccess, onClose }) => {
                                 type="submit"
                                 disabled={isLoading}
                                 className={`w-full py-2 px-4 rounded font-medium ${isLoading
-                                        ? 'bg-blue-400 cursor-not-allowed'
-                                        : 'bg-blue-600 hover:bg-blue-700'
+                                    ? 'bg-blue-400 cursor-not-allowed'
+                                    : 'bg-blue-600 hover:bg-blue-700'
                                     } text-white transition-colors mb-4`}
                             >
                                 {isLoading ? (

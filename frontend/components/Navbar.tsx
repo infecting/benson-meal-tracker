@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarCheck, LogOut, Settings, ShoppingCart, TrendingUp, Utensils } from "lucide-react";
+import { CalendarCheck, LogOut, ShoppingCart, TrendingUp, Utensils } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation"; // Use next/navigation in app router
 import { useState } from "react";
@@ -51,7 +51,9 @@ export const Navbar = ({ currentPath = "/" }) => {
         <nav className="bg-gray-800 text-white w-64 min-h-screen p-4 space-y-2 fixed top-0 left-0">
             <div className="text-2xl font-bold mb-8 flex items-center space-x-2">
                 <Utensils size={28} className="text-indigo-400" />
-                <span>Campus Bites</span>
+                <span>
+                    Benson Bites
+                </span>
             </div>
             {navItems.map((item) => (
                 <Link
@@ -65,14 +67,7 @@ export const Navbar = ({ currentPath = "/" }) => {
                 </Link>
             ))}
             <div className="absolute bottom-4 left-4 right-4 space-y-2">
-                <Link
-                    href="/settings"
-                    className={`w-full flex items-center space-x-3 p-3 rounded-lg text-left hover:bg-gray-700 transition-colors ${isActive('/settings') ? 'bg-indigo-600 text-white' : 'text-gray-300'
-                        }`}
-                >
-                    <Settings size={20} />
-                    <span>Settings</span>
-                </Link>
+
                 <button
                     onClick={handleLogout}
                     disabled={isLoggingOut}

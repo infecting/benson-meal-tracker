@@ -1,127 +1,1201 @@
-// This is a conceptual representation of a Next.js application structure.
-// In a real Next.js project, these would be separate files in the directories indicated by the comments.
-// We'll use a simple state to simulate page navigation within this single component.
-
-import React, { useState, useEffect, createContext, useContext } from 'react';
-// In a real Next.js app, you'd install these:
-// npm install lucide-react recharts
-// For this example, we'll use placeholder icons or simple SVGs if lucide-react is not available.
-// Let's assume lucide-react icons are available for this example.
-// If not, replace with simple text or SVG.
-import { LayoutDashboard, ShoppingCart, CreditCard, TrendingUp, CalendarPlus, History, Settings, LogOut, ChevronDown, UserCircle, Utensils, Gift, Star } from 'lucide-react';
-
-// Tailwind CSS is assumed to be set up in a real Next.js project (globals.css and tailwind.config.js)
-// For this example, styles will be inline or rely on Tailwind classes.
-
-// --- types/index.ts (or individual files like types/points.ts) ---
-interface Transaction {
-  id: string;
-  date: string;
-  description: string;
-  amount: number;
-  type: 'earn' | 'spend';
-  category: string; // e.g., "Breakfast", "Lunch", "Snacks"
-  location: string; // e.g., "Main Cafeteria", "Cafe Bytes"
+// Types.ts - Move all interfaces to a separate file
+export interface MenuItem {
+    id: number;
+    sectionid: number;
+    name: string;
+    description: string;
+    price: number;
+    category: string;
+    imageUrl?: string;
+    available: boolean;
+    options?: OptionVal[][];
 }
 
-interface PointsData {
-  currentBalance: number;
-  transactions: Transaction[];
+export interface OptionVal {
+    price: number;
+    name: string;
+    optId: number;
+    valueId: number;
 }
 
-interface Order {
-  id: string;
-  itemName: string;
-  quantity: number;
-  scheduledTime: string; // ISO string
-  pickupLocation: string;
-  status: 'Pending' | 'Confirmed' | 'Ready' | 'Picked Up' | 'Cancelled';
+export interface CartItem {
+    itemid: number;
+    sectionid: number;
+    upsell_upsellid: number;
+    upsell_variantid: number;
+    options: {
+        optionid: number;
+        values: {
+            valueid: number;
+            combo_itemid: number;
+            combo_items: any[];
+        }[];
+    }[];
+    meal_ex_applied: boolean;
 }
 
-interface WrappedStat {
-  title: string;
-  value: string | number;
-  description?: string;
-  icon?: React.ReactNode;
+export interface ScheduleOptions {
+    isScheduled: boolean;
+    date: string;
+    time: string;
 }
 
-interface DiningWrappedData {
-  totalSpent: number;
-  mostFrequentLocation: string;
-  favoriteItem: string; // Simplified
-  peakSpendingTime: string; // e.g., "Lunch Rush (12-1 PM)"
-  totalOrders: number;
-  uniqueItemsTried: number;
-  stats: WrappedStat[];
+export interface SpecialRequest {
+    hasRequest: boolean;
+    requestText: string;
 }
 
-// --- lib/api/points.ts ---
+export interface SelectedOptions {
+    [optionGroupIndex: number]: OptionVal;
+}
 
+export interface UserData {
+    token: {
+        userId: number;
+        sessionId: string;
+        loginToken: string;
+        name: string;
+    }
+}
 
-// --- lib/api/orders.ts ---
+export interface OrderStatus {
+    orderId: string;
+    status: string;
+    message?: string;
+    requestLink?: string;
+}
 
-// --- lib/api/wrapped.ts ---
+// api.ts - Move API calls to a separate service
+import axios from 'axios';
+import { MenuItem, UserData, CartItem, ScheduleOptions, SpecialRequest } from './Types';
 
+const API_BASE_URL = 'http://localhost:3000';
 
-// --- components/common/Navbar.tsx ---
+export const fetchMenuItems = async (restaurantId: string, user: UserData | null) => {
+    return axios.post<MenuItem[]>(
+        `${API_BASE_URL}/getMenu?l=${restaurantId}`,
+        {
+            "userId": user?.token.userId,
+            "sessionId": user?.token.sessionId,
+            "loginToken": user?.token.loginToken
+        },
+        {
+            timeout: 10000,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+};
 
+export const placeOrder = async (
+    restaurantId: string,
+    item: MenuItem,
+    user: UserData,
+    options: SelectedOptions | undefined,
+    scheduleOptions: ScheduleOptions,
+    specialRequest: SpecialRequest,
+    isRequest: boolean
+) => {
+    // Format the cart items
+    const cartItems: CartItem[] = [
+        {
+            itemid: item.id,
+            sectionid: item.sectionid,
+            upsell_upsellid: 0,
+            upsell_variantid: 0,
+            options: options ?
+                Object.entries(options).map(([groupIndex, optionValue]) => ({
+                    optionid: optionValue.optId,
+                    values: [{
+                        valueid: optionValue.valueId,
+                        combo_itemid: 0,
+                        combo_items: [],
+                    }],
+                })) :
+                [],
+            meal_ex_applied: false,
+        },
+    ];
 
-// --- components/common/Layout.tsx ---
+    // Calculate total in cents
+    const priceInCents = Math.round(item.price * 100);
 
+    // Prepare order data
+    const orderData: any = {
+        userId: user.token.userId,
+        sessionId: user.token.sessionId,
+        loginToken: user.token.loginToken,
+        cartItems: cartItems,
+        locationId: restaurantId,
+        total: priceInCents
+    };
 
-// --- components/common/Button.tsx ---
+    // If this is a scheduled order
+    if (scheduleOptions.isScheduled) {
+        orderData.scheduled = true;
+        orderData.scheduleDate = scheduleOptions.date;
+        orderData.scheduleTime = scheduleOptions.time;
+    }
 
+    // Add special request if present
+    if (specialRequest.hasRequest && specialRequest.requestText.trim()) {
+        orderData.specialRequest = specialRequest.requestText.trim();
+    }
 
-// --- components/points/PointsBalanceCard.tsx ---
+    // If this is a request (to generate a shareable link)
+    if (isRequest) {
+        return axios.post(
+            `${API_BASE_URL}/requestItem`,
+            {
+                ...orderData,
+                isRequest: true
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+    } else {
+        // Normal order flow
+        return axios.post(
+            `${API_BASE_URL}/order`,
+            orderData,
+            {
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+    }
+};
 
+export const checkOrderStatus = async (orderId: string, user: UserData) => {
+    return axios.post(
+        `${API_BASE_URL}/orderStatus`,
+        {
+            userId: user.token.userId,
+            sessionId: user.token.sessionId,
+            loginToken: user.token.loginToken,
+            orderId: orderId
+        },
+        {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+};
 
-// --- components/points/TransactionRow.tsx ---
+// components/MenuItem.tsx - Individual menu item component
+import React from 'react';
+import { motion } from 'framer-motion';
+import { MenuItem } from '../Types';
 
+interface MenuItemProps {
+    item: MenuItem;
+    isOrdering: boolean;
+    onRequestItem: (item: MenuItem) => void;
+}
 
-// --- components/points/TransactionHistoryTable.tsx ---
+const MenuItemComponent: React.FC<MenuItemProps> = ({ item, isOrdering, onRequestItem }) => {
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-100"
+        >
+            {item.imageUrl && (
+                <div className="h-48 overflow-hidden">
+                    <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                            e.currentTarget.src = '/placeholder-food.jpg';
+                            e.currentTarget.onerror = null;
+                        }}
+                    />
+                </div>
+            )}
+            <div className="p-4">
+                <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-lg font-semibold text-gray-900">{item.name}</h3>
+                    <span className="font-medium text-blue-600">${item.price.toFixed(2)}</span>
+                </div>
+                <p className="text-gray-600 text-sm mb-4">{item.description}</p>
+                <button
+                    onClick={() => onRequestItem(item)}
+                    disabled={!item.available || isOrdering}
+                    className={`w-full py-2 px-4 rounded text-sm font-medium transition-colors ${!item.available
+                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        : isOrdering
+                            ? 'bg-blue-400 text-white cursor-wait'
+                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
+                >
+                    {!item.available
+                        ? 'Currently Unavailable'
+                        : isOrdering
+                            ? 'Processing...'
+                            : 'Order Item'}
+                </button>
+            </div>
+        </motion.div>
+    );
+};
 
+export default MenuItemComponent;
 
-// --- pages/points.tsx ---
+// components/UserAccount.tsx - Component for user account information
+import React from 'react';
+import { UserData } from '../Types';
 
-// --- components/order/OrderForm.tsx ---
+interface UserAccountProps {
+    user: UserData | null;
+    onLoginClick: () => void;
+    onLogout: () => void;
+}
 
+const UserAccount: React.FC<UserAccountProps> = ({ user, onLoginClick, onLogout }) => {
+    return (
+        <div className="mb-6 flex justify-between items-center">
+            <h2 className="text-2xl font-bold text-gray-800">Menu</h2>
 
-// --- pages/schedule-order.tsx ---
+            {user ? (
+                <div className="flex items-center space-x-4">
+                    <div className="text-right">
+                        <p className="text-sm text-gray-600">Logged in as</p>
+                        <p className="font-medium text-gray-900">SCU STUDENT</p>
+                    </div>
+                    <button
+                        onClick={onLogout}
+                        className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm"
+                    >
+                        Logout
+                    </button>
+                </div>
+            ) : (
+                <button
+                    onClick={onLoginClick}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+                >
+                    Login to Order
+                </button>
+            )}
+        </div>
+    );
+};
 
+export default UserAccount;
 
-// --- components/order/ScheduledOrderItem.tsx ---
+// components/OrderStatusBanner.tsx - Component for displaying order status
+import React from 'react';
+import { OrderStatus } from '../Types';
 
+interface OrderStatusBannerProps {
+    orderStatus: OrderStatus | null;
+}
 
-// --- pages/my-orders.tsx ---
+const OrderStatusBanner: React.FC<OrderStatusBannerProps> = ({ orderStatus }) => {
+    if (!orderStatus) return null;
 
+    return (
+        <div className={`mb-6 p-4 rounded-lg ${orderStatus.status === 'success' ? 'bg-green-50 border border-green-200 text-green-700' :
+            orderStatus.status === 'error' ? 'bg-red-50 border border-red-200 text-red-700' :
+                'bg-blue-50 border border-blue-200 text-blue-700'
+            }`}>
+            <div className="flex items-center">
+                {orderStatus.status === 'success' && (
+                    <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                )}
+                {orderStatus.status === 'error' && (
+                    <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                )}
+                {orderStatus.status !== 'success' && orderStatus.status !== 'error' && (
+                    <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                )}
+                <span>{orderStatus.message}</span>
+            </div>
+            
+            {/* Display request link if available */}
+            {orderStatus.requestLink && (
+                <div className="mt-3">
+                    <p className="mb-2">Share this link with anyone to request this item:</p>
+                    <div className="flex">
+                        <input 
+                            type="text" 
+                            value={orderStatus.requestLink} 
+                            readOnly 
+                            className="flex-grow p-2 border border-gray-300 rounded-l-md text-sm"
+                        />
+                        <button 
+                            onClick={() => navigator.clipboard.writeText(orderStatus.requestLink || '')}
+                            className="bg-blue-100 hover:bg-blue-200 text-blue-800 px-4 py-2 rounded-r-md text-sm"
+                        >
+                            Copy
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
+export default OrderStatusBanner;
 
-// --- components/wrapped/StatCard.tsx ---
+// components/ErrorBanner.tsx - Component for displaying errors
+import React from 'react';
 
+interface ErrorBannerProps {
+    error: string;
+    onRetry: () => void;
+    fetchFailed: boolean;
+}
 
-// --- pages/wrapped.tsx ---
+const ErrorBanner: React.FC<ErrorBannerProps> = ({ error, onRetry, fetchFailed }) => {
+    if (!error) return null;
 
+    return (
+        <div className={`${fetchFailed ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'} px-4 py-3 rounded mb-6 flex justify-between items-center`}>
+            <div className="flex items-center">
+                <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d={fetchFailed 
+                        ? "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" 
+                        : "M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"} 
+                    clipRule="evenodd" />
+                </svg>
+                <span>{error}</span>
+            </div>
+            <button
+                onClick={onRetry}
+                className={`text-sm ${fetchFailed ? 'bg-red-100 hover:bg-red-200 text-red-800' : 'bg-yellow-100 hover:bg-yellow-200 text-yellow-800'} font-semibold py-1 px-3 rounded ml-2`}
+            >
+                Retry
+            </button>
+        </div>
+    );
+};
 
-// --- pages/index.tsx (Dashboard/Home Page) ---
+export default ErrorBanner;
 
+// components/CustomizationModal.tsx - Component for item customization
+import React from 'react';
+import { motion } from 'framer-motion';
+import { MenuItem, SelectedOptions, OptionVal } from '../Types';
 
+interface CustomizationModalProps {
+    isOpen: boolean;
+    item: MenuItem | null;
+    selectedOptions: SelectedOptions;
+    isOrdering: boolean;
+    onClose: () => void;
+    onSubmit: () => void;
+    onOptionSelect: (groupIndex: number, option: OptionVal) => void;
+}
 
-// --- _app.tsx (Conceptual Root Component) ---
-// This AppWrapper simulates the behavior of Next.js pages and _app.tsx
+const CustomizationModal: React.FC<CustomizationModalProps> = ({
+    isOpen,
+    item,
+    selectedOptions,
+    isOrdering,
+    onClose,
+    onSubmit,
+    onOptionSelect,
+}) => {
+    if (!isOpen || !item) return null;
 
+    // Calculate total price including options
+    const totalPrice = item.price +
+        Object.values(selectedOptions).reduce((sum, option) => sum + option.price, 0);
 
-// Default export for the immersive environment
-export default AppWrapper;
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+            >
+                <div className="p-6">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-bold">{item.name}</h3>
+                        <button
+                            onClick={onClose}
+                            className="text-gray-500 hover:text-gray-700"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
 
-// To make this runnable in a typical React setup (like CodeSandbox or a local CRA),
-// you would need to ensure Tailwind CSS is configured.
-// For Next.js, you'd create files in the specified directories.
-// e.g., pages/_app.tsx would contain:
-// import '../styles/globals.css'; // For Tailwind
-// import type { AppProps } from 'next/app';
-// function MyApp({ Component, pageProps }: AppProps) {
-//   return <Component {...pageProps} />
-// }
-// export default MyApp;
-// And `pages/index.tsx` would export one of the page components.
-// The Layout component would typically wrap <Component {...pageProps} /> in _app.tsx.
+                    <div className="mb-4">
+                        <p className="text-gray-600">{item.description}</p>
+                        <p className="font-medium text-blue-600 mt-2">Base Price: ${item.price.toFixed(2)}</p>
+                    </div>
+
+                    <div className="mb-6">
+                        <h4 className="font-medium text-gray-800 mb-2">Customize Your Order:</h4>
+
+                        {item.options?.map((optionGroup, groupIndex) => (
+                            <div key={groupIndex} className="mb-4">
+                                <p className="font-medium text-gray-700 mb-2">
+                                    {optionGroup.length > 1
+                                        ? `Choose one option:`
+                                        : `Add option:`
+                                    }
+                                </p>
+                                <div className="space-y-2">
+                                    {optionGroup.map((option, optionIndex) => (
+                                        <div key={optionIndex} className="flex items-center">
+                                            <input
+                                                type="radio"
+                                                id={`option-${groupIndex}-${optionIndex}`}
+                                                name={`option-group-${groupIndex}`}
+                                                checked={selectedOptions[groupIndex]?.name === option.name}
+                                                onChange={() => onOptionSelect(groupIndex, option)}
+                                                className="mr-2"
+                                            />
+                                            <label htmlFor={`option-${groupIndex}-${optionIndex}`} className="flex-1">
+                                                {option.name}
+                                                {option.price > 0 && ` (+$${option.price.toFixed(2)})`}
+                                            </label>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="flex justify-between items-center border-t pt-4">
+                        <div>
+                            <p className="text-gray-700">Total Price:</p>
+                            <p className="text-xl font-bold text-blue-600">
+                                ${totalPrice.toFixed(2)}
+                            </p>
+                        </div>
+                        <button
+                            onClick={onSubmit}
+                            disabled={isOrdering}
+                            className={`py-2 px-6 rounded-lg transition-colors ${isOrdering
+                                ? 'bg-blue-400 text-white cursor-wait'
+                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                                }`}
+                        >
+                            {isOrdering ? 'Processing...' : 'Place Order'}
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
+export default CustomizationModal;
+
+// components/ScheduleModal.tsx - Component for scheduling options
+import React from 'react';
+import { motion } from 'framer-motion';
+import { MenuItem, ScheduleOptions, SpecialRequest } from '../Types';
+
+interface ScheduleModalProps {
+    isOpen: boolean;
+    item: MenuItem | null;
+    scheduleOptions: ScheduleOptions;
+    specialRequest: SpecialRequest;
+    isRequest: boolean;
+    isOrdering: boolean;
+    onClose: () => void;
+    onProceed: () => void;
+    onScheduleChange: (field: keyof ScheduleOptions, value: string | boolean) => void;
+    onSpecialRequestChange: (field: keyof SpecialRequest, value: string | boolean) => void;
+    onRequestToggle: (isRequest: boolean) => void;
+}
+
+const ScheduleModal: React.FC<ScheduleModalProps> = ({
+    isOpen,
+    item,
+    scheduleOptions,
+    specialRequest,
+    isRequest,
+    isOrdering,
+    onClose,
+    onProceed,
+    onScheduleChange,
+    onSpecialRequestChange,
+    onRequestToggle,
+}) => {
+    if (!isOpen || !item) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+            >
+                <div className="p-6">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-bold">Order Options</h3>
+                        <button
+                            onClick={onClose}
+                            className="text-gray-500 hover:text-gray-700"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div className="mb-4">
+                        <h4 className="font-medium text-gray-800">{item.name}</h4>
+                        <p className="text-gray-600 text-sm">{item.description}</p>
+                        <p className="font-medium text-blue-600 mt-2">Price: ${item.price.toFixed(2)}</p>
+                    </div>
+
+                    {/* Order Type Selection */}
+                    <div className="mb-6 border-t pt-4">
+                        <div className="flex items-center space-x-4 mb-4">
+                            <button
+                                onClick={() => onRequestToggle(false)}
+                                className={`px-4 py-2 rounded-lg transition-colors ${!isRequest
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                            >
+                                Place Order
+                            </button>
+                            <button
+                                onClick={() => onRequestToggle(true)}
+                                className={`px-4 py-2 rounded-lg transition-colors ${isRequest
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                            >
+                                Generate Request Link
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Based on selection, show appropriate options */}
+                    {!isRequest ? (
+                        <>
+                            {/* Schedule Section - for normal orders */}
+                            <div className="mb-6">
+                                <div className="flex items-center mb-3">
+                                    <input
+                                        type="checkbox"
+                                        id="schedule-toggle"
+                                        checked={scheduleOptions.isScheduled}
+                                        onChange={(e) => onScheduleChange('isScheduled', e.target.checked)}
+                                        className="mr-2"
+                                    />
+                                    <label htmlFor="schedule-toggle" className="font-medium text-gray-800">
+                                        Schedule for later
+                                    </label>
+                                </div>
+
+                                {scheduleOptions.isScheduled && (
+                                    <div className="pl-6 space-y-3">
+                                        <div>
+                                            <label htmlFor="schedule-date" className="block text-sm text-gray-700 mb-1">
+                                                Date
+                                            </label>
+                                            <input
+                                                type="date"
+                                                id="schedule-date"
+                                                value={scheduleOptions.date}
+                                                onChange={(e) => onScheduleChange('date', e.target.value)}
+                                                min={new Date().toISOString().split('T')[0]}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="schedule-time" className="block text-sm text-gray-700 mb-1">
+                                                Time
+                                            </label>
+                                            <input
+                                                type="time"
+                                                id="schedule-time"
+                                                value={scheduleOptions.time}
+                                                onChange={(e) => onScheduleChange('time', e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Special Request Section */}
+                            <div className="mb-6 border-t pt-4">
+                                <div className="flex items-center mb-3">
+                                    <input
+                                        type="checkbox"
+                                        id="request-toggle"
+                                        checked={specialRequest.hasRequest}
+                                        onChange={(e) => onSpecialRequestChange('hasRequest', e.target.checked)}
+                                        className="mr-2"
+                                    />
+                                    <label htmlFor="request-toggle" className="font-medium text-gray-800">
+                                        Add special request
+                                    </label>
+                                </div>
+
+                                {specialRequest.hasRequest && (
+                                    <div className="pl-6">
+                                        <label htmlFor="request-text" className="block text-sm text-gray-700 mb-1">
+                                            Your request
+                                        </label>
+                                        <textarea
+                                            id="request-text"
+                                            value={specialRequest.requestText}
+                                            onChange={(e) => onSpecialRequestChange('requestText', e.target.value)}
+                                            placeholder="E.g., No onions, extra sauce, etc."
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 h-20"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    ) : (
+                        /* Request Link Info */
+                        <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                            <p className="text-blue-800 mb-2">
+                                <svg className="h-5 w-5 inline-block mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                                Request Link Information
+                            </p>
+                            <p className="text-sm text-blue-700">
+                                Proceeding will generate a sharable link for this menu item. Anyone with the link can order this item.
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="flex justify-between items-center border-t pt-4">
+                        <button
+                            onClick={onClose}
+                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={onProceed}
+                            disabled={
+                                isOrdering ||
+                                (specialRequest.hasRequest && !specialRequest.requestText.trim())
+                            }
+                            className={`py-2 px-6 rounded-lg transition-colors ${isOrdering ||
+                                (specialRequest.hasRequest && !specialRequest.requestText.trim())
+                                ? 'bg-blue-400 text-white cursor-not-allowed'
+                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                                }`}
+                        >
+                            {isOrdering
+                                ? 'Processing...'
+                                : isRequest
+                                    ? 'Generate Link'
+                                    : 'Continue'}
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
+export default ScheduleModal;
+
+// Main RestaurantMenu.tsx - The main component that uses all the others
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import "../src/app/globals.css";
+import { MenuItem, UserData, OrderStatus, SelectedOptions, ScheduleOptions, SpecialRequest } from './Types';
+import { fetchMenuItems, placeOrder, checkOrderStatus } from './api';
+import MenuItemComponent from './components/MenuItem';
+import UserAccount from './components/UserAccount';
+import OrderStatusBanner from './components/OrderStatusBanner';
+import ErrorBanner from './components/ErrorBanner';
+import CustomizationModal from './components/CustomizationModal';
+import ScheduleModal from './components/ScheduleModal';
+import LoginMenu from './LoginModal';
+
+interface MenuProps {
+    restaurantId: string;
+    onRequestItem: (item: MenuItem) => void;
+}
+
+const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) => {
+    const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string>('');
+    const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
+    const [selectedOptions, setSelectedOptions] = useState<SelectedOptions>({});
+    const [showCustomizationModal, setShowCustomizationModal] = useState<boolean>(false);
+    const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
+    const [showScheduleModal, setShowScheduleModal] = useState<boolean>(false);
+    const [user, setUser] = useState<UserData | null>(null);
+    const [pendingItem, setPendingItem] = useState<MenuItem | null>(null);
+    const [retryCount, setRetryCount] = useState<number>(0);
+    const [fetchFailed, setFetchFailed] = useState<boolean>(false);
+    const [orderStatus, setOrderStatus] = useState<OrderStatus | null>(null);
+    const [isOrdering, setIsOrdering] = useState<boolean>(false);
+    const [isRequest, setIsRequest] = useState<boolean>(false);
+    const [scheduleOptions, setScheduleOptions] = useState<ScheduleOptions>({
+        isScheduled: false,
+        date: new Date().toISOString().split('T')[0], // Today's date as default
+        time: '12:00'
+    });
+    const [specialRequest, setSpecialRequest] = useState<SpecialRequest>({
+        hasRequest: false,
+        requestText: ''
+    });
+    
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 3000; // 3 seconds
+
+    // Load menu items with retry logic
+    const loadMenuItems = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            const response = await fetchMenuItems(restaurantId, user);
+
+            // Check if the response data is an empty array or doesn't exist
+            if (!response.data || response.data.length === 0) {
+                setError('No menu items available for this location. The restaurant may be closed or updating their menu.');
+                setMenuItems([]);
+            } else {
+                setMenuItems(response.data);
+                setError(''); // Clear any previous errors
+            }
+
+            setIsLoading(false);
+            setFetchFailed(false);
+            setRetryCount(0); // Reset retry count on successful fetch
+        } catch (err) {
+            console.error('Error fetching menu items:', err);
+            
+            // Handle different types of errors
+            if (axios.isAxiosError(err)) {
+                if (err.code === 'ECONNABORTED') {
+                    setError('Request timed out. The server might be busy.');
+                } else if (!err.response) {
+                    setError('Network error. Please check your connection.');
+                } else {
+                    const status = err.response.status;
+                    if (status === 404) {
+                        setError('Menu not found. Please check the restaurant ID.');
+                    } else if (status >= 500) {
+                        setError('Server error. Please try again later.');
+                    } else {
+                        setError(`Failed to load menu items (Status ${status}).`);
+                    }
+                }
+            } else {
+                setError('An unexpected error occurred. Please try again later.');
+            }
+
+            setIsLoading(false);
+            setFetchFailed(true);
+
+            // Implement retry logic with backoff
+            if (retryCount < MAX_RETRIES) {
+                console.log(`Retrying... Attempt ${retryCount + 1} of ${MAX_RETRIES}`);
+                setTimeout(() => {
+                    setRetryCount(prevCount => prevCount + 1);
+                }, RETRY_DELAY * (retryCount + 1)); // Exponential backoff
+            }
+        }
+    }, [restaurantId, user, retryCount]);
+
+    // Load user data from localStorage on component mount
+    useEffect(() => {
+        const savedUserData = localStorage.getItem('userData');
+        if (savedUserData) {
+            try {
+                setUser(JSON.parse(savedUserData));
+            } catch (e) {
+                // Invalid data in localStorage, clear it
+                localStorage.removeItem('userData');
+            }
+        }
+    }, []);
+
+    // Fetch menu items when dependencies change or on retry
+    useEffect(() => {
+        // Only fetch if we haven't exceeded max retries
+        if (retryCount <= MAX_RETRIES) {
+            loadMenuItems();
+        } else {
+            setError('Failed to load menu after multiple attempts. Please reload the page or try again later.');
+        }
+    }, [loadMenuItems, retryCount]);
+
+    // Process and place an order
+    const processOrder = async (item: MenuItem, options?: SelectedOptions) => {
+        if (!user) {
+            setError('You must be logged in to place an order.');
+            setShowLoginModal(true);
+            return;
+        }
+
+        setIsOrdering(true);
+        setOrderStatus(null);
+        setError('');
+
+        try {
+            const response = await placeOrder(
+                restaurantId,
+                item,
+                user,
+                options,
+                scheduleOptions,
+                specialRequest,
+                isRequest
+            );
+
+            if (isRequest && response.data.requestId) {
+                // Handle request link generation
+                setOrderStatus({
+                    orderId: response.data.requestId,
+                    status: 'success',
+                    message: `Request link generated successfully!`,
+                    requestLink: response.data.requestLink || `http://yoursite.com/request/${response.data.requestId}`
+                });
+            } 
+            else if (response.data.orderId) {
+                // Handle normal order
+                const statusMessage = scheduleOptions.isScheduled
+                    ? `Order #${response.data.orderId} scheduled for ${scheduleOptions.date} at ${scheduleOptions.time}!`
+                    : `Order #${response.data.orderId} placed successfully!`;
+
+                setOrderStatus({
+                    orderId: response.data.orderId,
+                    status: 'success',
+                    message: statusMessage
+                });
+
+                // Only check order status for non-scheduled orders
+                if (!scheduleOptions.isScheduled) {
+                    monitorOrderStatus(response.data.orderId);
+                }
+
+                // Reset options after successful order
+                resetOptions();
+            } 
+            else {
+                setOrderStatus({
+                    orderId: '',
+                    status: 'error',
+                    message: isRequest 
+                        ? 'Failed to generate request link. Please try again.'
+                        : 'Failed to place order. Please try again.'
+                });
+            }
+        } catch (err) {
+            console.error('Error processing order:', err);
+            setOrderStatus({
+                orderId: '',
+                status: 'error',
+                message: isRequest
+                    ? 'Error generating request link. Please try again later.'
+                    : 'Error placing order. Please try again later.'
+            });
+
+            if (axios.isAxiosError(err) && err.response) {
+                setError(`${isRequest ? 'Request' : 'Order'} failed: ${err.response.data.error || 'Unknown error'}`);
+            } else {
+                setError(`Failed to ${isRequest ? 'generate request link' : 'place order'}. Network error or server unavailable.`);
+            }
+        } finally {
+            setIsOrdering(false);
+        }
+    };
+
+    // Monitor order status with polling
+    const monitorOrderStatus = async (orderId: string) => {
+        if (!user) return;
+
+        try {
+            const response = await checkOrderStatus(orderId, user);
+
+            setOrderStatus(prev => ({
+                ...prev!,
+                status: response.data.status || 'pending',
+                message: `Order #${orderId}: ${response.data.status || 'Status pending'}`
+            }));
+
+            // Poll for updates if order is still processing
+            if (response.data.status !== 'completed' && response.data.status !== 'cancelled') {
+                setTimeout(() => monitorOrderStatus(orderId), 5000);
+            }
+        } catch (err) {
+            console.error('Error checking order status:', err);
+        }
+    };
+
+    // Reset all options after an order
+    const resetOptions = () => {
+        setScheduleOptions({
+            isScheduled: false,
+            date: new Date().toISOString().split('T')[0],
+            time: '12:00'
+        });
+        
+        setSpecialRequest({
+            hasRequest: false,
+            requestText: ''
+        });
+        
+        setIsRequest(false);
+    };
+
+    // Handle the initial request for an item
+    const handleRequestItem = (item: MenuItem) => {
+        // If user is not logged in, show login modal and save the pending item
+        if (!user) {
+            setPendingItem(item);
+            setShowLoginModal(true);
+            return;
+        }
+
+        // Set the currently selected item and show schedule modal
+        setCustomizingItem(item);
+        setShowScheduleModal(true);
+    };
+
+    // Handle proceeding with the order after scheduling options
+    const handleProceedWithOrder = () => {
+        if (!customizingItem) return;
+
+        // If the item has options, open the customization modal
+        if (customizingItem.options && customizingItem.options.length > 0 && customizingItem.options.some(group => group.length > 0)) {
+            // Initialize selected options with the first option in each group
+            const initialOptions: SelectedOptions = {};
+            customizingItem.options.forEach((group, index) => {
+                if (group.length > 0) {
+                    initialOptions[index] = group[0];
+                }
+            });
+            setSelectedOptions(initialOptions);
+            setShowScheduleModal(false);
+            setShowCustomizationModal(true);
+        } else {
+            // If no options, directly call the parent handler and place order
+            // Pass the item to onRequestItem only if it's a request
+            if (isRequest) {
+                onRequestItem(customizingItem);
+            }
+            processOrder(customizingItem);
+            setShowScheduleModal(false);
+        }
+    };
+
+    // Handle option selection in customization modal
+    const handleOptionSelect = (groupIndex: number, option: OptionVal) => {
+        setSelectedOptions(prev => ({
+            ...prev,
+            [groupIndex]: option
+        }));
+    };
+
+    // Handle submitting customization and placing order
+    const handleSubmitCustomization = () => {
+        if (!customizingItem) return;
+
+        // Calculate the total price including options
+        const basePrice = customizingItem.price;
+        const optionsPrice = Object.values(selectedOptions).reduce((sum, option) => sum + option.price, 0);
+
+        // Create a customized item with the selected options
+        const customizedItem: MenuItem = {
+            ...customizingItem,
+            price: basePrice + optionsPrice,
+            name: `${customizingItem.name} (Customized)`,
+            description: `${customizingItem.description} | Options: ${Object.values(selectedOptions)
+                .map(option => option.name)
+                .join(', ')}`,
+        };
+
+        // Pass the customized item to the parent handler only if it's a request
+        if (isRequest) {
+            onRequestItem(customizedItem);
+        }
+
+        // Place the order with selected options
+        processOrder(customizingItem, selectedOptions);
+
+        // Close the modal
+        setShowCustomizationModal(false);
+        setCustomizingItem(null);
+    };
+
+    // Handle schedule option changes
+    const handleScheduleChange = (field: keyof ScheduleOptions, value: string | boolean) => {
+        setScheduleOptions(prev => ({
+            ...prev,
+            [field]: value
+        }));
+    };
+
+    // Handle special request changes
+    const handleSpecialRequestChange = (field: keyof SpecialRequest, value: string | boolean) => {
+        setSpecialRequest(prev => ({
+            ...prev,
+            [field]: value
+        }));
+    };
+
+    // Handle login success
+    const handleLoginSuccess = (userData: UserData) => {
+        // Save user data to state and localStorage
+        setUser(userData);
+        localStorage.setItem('userData', JSON.stringify(userData));
+
+        // Close the login modal
+        setShowLoginModal(false);
+
+        // If there's a pending item, process it
+        if (pendingItem) {
+            handleRequestItem(pendingItem);
+            setPendingItem(null);
+        }
+    };
+
+    // Handle logout
+    const handleLogout = () => {
+        // Clear user data from state and localStorage
+        setUser(null);
+        localStorage.removeItem('userData');
+        // Clear any order status
+        setOrderStatus(null);
+    };
+
+    // Handle retry for loading menu items
+    const handleRetry = () => {
+        setError('');
+        setFetchFailed(false);
+        setRetryCount(0);
+    };
+
+    // Show loading spinner when loading and not in a failed state
+    if (isLoading && !fetchFailed) {
+        return (
+            <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+        );
+    }
+
+    // Show error message when all retries have failed
+    if (error && fetchFailed && retryCount >= MAX_RETRIES) {
+        return (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
+                <div className="flex items-center">
+                    <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                        <p className="font-bold">Error loading menu</p>
+                        <p>{error}</p>
+                    </div>
+                </div>
+                <div className="mt-3">
+                    <button
+                        onClick={handleRetry}
+                        className="bg-red-100 hover:bg-red-200 text-red-800 font-semibold py-2 px-4 rounded"
+                    >
+                        Try Again
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-full max-w-6xl mx-auto">
+            {/* User Account */}
+            <UserAccount 
+                user={user}
+                onLoginClick={() => setShowLoginModal(true)}
+                onLogout={handleLogout}
+            />
+
+            {/* Order Status Banner */}
+            <OrderStatusBanner orderStatus={orderStatus} />
+
+            {/* Error Banner */}
+            <ErrorBanner 
+                error={error} 
+                onRetry={handleRetry} 
+                fetchFailed={fetchFailed}
+            />
+
+            {/* Menu Items Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {Array.isArray(menuItems) && menuItems.map((item) => (
+                    <MenuItemComponent
+                        key={item.id}
+                        item={item}
+                        isOrdering={isOrdering}
+                        onRequestItem={handleRequestItem}
+                    />
+                ))}
+            </div>
+
+            {menuItems.length === 0 && !isLoading && !error && (
+                <div className="text-center py-12 text-gray-500">
+                    No items found.
+                </div>
+            )}
+
+            {/* Customization Modal */}
+            <CustomizationModal
+                isOpen={showCustomizationModal}
+                item={customizingItem}
+                selectedOptions={selectedOptions}
+                isOrdering={isOrdering}
+                onClose={() => setShowCustomizationModal(false)}
+                onSubmit={handleSubmitCustomization}
+                onOptionSelect={handleOptionSelect}
+            />
+
+            {/* Schedule Modal */}
+            <ScheduleModal
+                isOpen={showScheduleModal}
+                item={customizingItem}
+                scheduleOptions={scheduleOptions}
+                specialRequest={specialRequest}
+                isRequest={isRequest}
+                isOrdering={isOrdering}
+                onClose={() => setShowScheduleModal(false)}
+                onProceed={handleProceedWithOrder}
+                onScheduleChange={handleScheduleChange}
+                onSpecialRequestChange={handleSpecialRequestChange}
+                onRequestToggle={(value) => setIsRequest(value)}
+            />
+
+            {/* Login Modal */}
+            {showLoginModal && (
+                <LoginMenu
+                    onLoginSuccess={handleLoginSuccess}
+                    onClose={() => {
+                        setShowLoginModal(false);
+                        setPendingItem(null);
+                    }}
+                />
+            )}
+        </div>
+    );
+};
+
+export default RestaurantMenu;

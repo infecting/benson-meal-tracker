@@ -1,16 +1,18 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { StatCard } from "../../../components/StatCard";
 import { Button } from "../../../components/Button";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import axios from "axios";
+import DiningPlaceMap from "../../../components/Map";
 
-// Update the interface to match the data structure
+// Update the interface to match the actual data structure
 interface DiningWrappedData {
     money: number;
     place: string;
     order: string;
     hours: { [hour: string]: number };
+    placeDist: any // This should be place names, not hours
 }
 
 // Helper function to format hours data for the histogram
@@ -21,11 +23,11 @@ const formatHoursForHistogram = (hoursData: { [hour: string]: number }) => {
         // Format label (convert 24h to 12h format)
         label: parseInt(hour) >= 12
             ? `${parseInt(hour) === 12 ? 12 : parseInt(hour) - 12}:00 PM`
-            : `${parseInt(hour)}:00 AM`
+            : `${parseInt(hour) === 0 ? 12 : parseInt(hour)}:00 ${parseInt(hour) === 0 ? 'AM' : 'AM'}`
     })).sort((a, b) => a.hour - b.hour); // Sort by hour for chronological display
 };
 
-export const WrappedPage: React.FC = () => {
+const WrappedPage: React.FC = () => {
     const [wrappedData, setWrappedData] = useState<DiningWrappedData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -84,6 +86,10 @@ export const WrappedPage: React.FC = () => {
                         if (!response.data || typeof response.data !== 'object') {
                             throw new Error("Invalid response data format");
                         }
+
+                        // Log the actual structure to help debug
+                        console.log("Received wrapped data:", response.data);
+                        console.log("placeDist structure:", response.data.placeDist);
 
                         setWrappedData(response.data);
                         break; // Success - exit the retry loop
@@ -204,7 +210,7 @@ export const WrappedPage: React.FC = () => {
             <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-red-500">
                 Your Campus Dining Wrapped!
             </h2>
-            <p className="text-lg text-gray-600">Here's a look back at your dining habits.</p>
+            <p className="text-lg text-gray-600">Here&apos;s a look back at your dining habits.</p>
 
             {/* Hours Histogram */}
             <div className="bg-white p-6 rounded-xl shadow-lg mt-8">
@@ -303,6 +309,11 @@ export const WrappedPage: React.FC = () => {
                     to { opacity: 1; transform: translateY(0); }
                 }
             `}</style>
+
+            {/* Only render the map if placeDist exists and has data */}
+            {wrappedData.placeDist && Object.keys(wrappedData.placeDist).length > 0 && (
+                <DiningPlaceMap placeData={wrappedData.placeDist} />
+            )}
         </div>
     );
 };
