@@ -38,7 +38,7 @@ const LoginMenu: React.FC<LoginProps> = ({ onLoginSuccess, onClose }) => {
             setError('');
 
             // Replace with your actual API endpoint
-            const response = await axios.post<UserData>(`${process.env.REQUESTURL}/mobileOrder/login`, {
+            const response = await axios.post<UserData>(`${process.env.NEXT_PUBLIC_REQUESTURL}/mobileOrder/login`, {
                 username,
                 password
             });

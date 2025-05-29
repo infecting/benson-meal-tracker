@@ -115,7 +115,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
             setIsLoading(true);
             // Replace with your actual API endpoint
             const response = await axios.post<MenuItem[]>(
-                `${process.env.REQUESTURL}/getMenu?l=${restaurantId}`,
+                `${process.env.NEXT_PUBLIC_REQUESTURL}/getMenu?l=${restaurantId}`,
                 {
                     "userId": user?.token.userId,
                     "sessionId": user?.token.sessionId,
@@ -264,7 +264,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
             if (requestOptions.isRequest) {
                 // Call the request endpoint instead of order
                 const requestResponse = await axios.post(
-                    `${process.env.REQUESTURL}/requestItem`,
+                    `${process.env.NEXT_PUBLIC_REQUESTURL}/requestItem`,
                     {
                         ...orderData,
                         isRequest: true,
@@ -303,7 +303,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
             } else {
                 // Normal order flow
                 const response = await axios.post(
-                    `${process.env.REQUESTURL}/order`,
+                    `${process.env.NEXT_PUBLIC_REQUESTURL}/order`,
                     orderData,
                     {
                         headers: {
@@ -373,7 +373,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
 
         try {
             const response = await axios.post(
-                `${process.env.REQUESTURL}/orderStatus`,
+                `${process.env.NEXT_PUBLIC_REQUESTURL}/orderStatus`,
                 {
                     userId: user.token.userId,
                     sessionId: user.token.sessionId,
