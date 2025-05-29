@@ -38,7 +38,7 @@ const LoginMenu: React.FC<LoginProps> = ({ onLoginSuccess, onClose }) => {
             setError('');
 
             // Replace with your actual API endpoint
-            const response = await axios.post<UserData>('http://localhost:3000/mobileOrder/login', {
+            const response = await axios.post<UserData>(`${process.env.REQUESTURL}/mobileOrder/login`, {
                 username,
                 password
             });
@@ -66,9 +66,6 @@ const LoginMenu: React.FC<LoginProps> = ({ onLoginSuccess, onClose }) => {
             setError('');
 
             // Replace with your actual password reset API endpoint
-            await axios.post('http://localhost:3000/requestPasswordReset', {
-                username: resetUsername
-            });
 
             setResetSent(true);
 
