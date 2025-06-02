@@ -31,14 +31,8 @@ interface ItemRequest {
     locationName?: string;
     description: string;
     createdAt: string;
-    status: 'pending' | 'approved' | 'rejected';
+    status: 'pending' | 'approved' | 'rejected' | 'fulfilled';
     upvotes: number;
-    comments: Array<{
-        userId: string;
-        userEmail: string;
-        text: string;
-        createdAt: string;
-    }>;
 }
 
 interface UserData {
@@ -59,11 +53,10 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>('');
     const [user, setUser] = useState<UserData | null>(null);
-    const [upvoting, setUpvoting] = useState(false);
-    const [commenting, setCommenting] = useState(false);
-    const [newComment, setNewComment] = useState('');
+    const [fulfilling, setFulfilling] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
     const [copySuccess, setCopySuccess] = useState(false);
+    const [fulfilled, setFulfilled] = useState(false);
 
     // Load user data
     useEffect(() => {
@@ -137,65 +130,82 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
         }
     };
 
-    const handleUpvote = async () => {
+    const handleFulfillRequest = async () => {
         if (!user?.token) {
-            toast.error('Please log in to upvote requests');
+            toast.error('Please log in to fulfill requests');
             return;
         }
 
         if (!request) return;
 
         try {
-            setUpvoting(true);
-            await axios.post(`${process.env.NEXT_PUBLIC_REQUESTURL}/upvoteItemRequest/${request._id}`, {
+            setFulfilling(true);
+
+            // First, try to place the order using the existing order endpoint
+            // We'll parse the description to extract the item details
+            const itemName = request.itemName;
+            const description = request.description;
+
+            // Create a mock order for the requested item
+            // In a real implementation, you'd need more item details
+            const orderData = {
                 userId: user.token.userId,
                 loginToken: user.token.loginToken,
                 sessionId: user.token.sessionId,
-                userEmail: `${user.token.name}@scu.edu`
-            });
+                cartItems: [{
+                    // You'll need to map this to actual menu item structure
+                    // This is a simplified version
+                    itemName: itemName,
+                    description: description,
+                    locationId: request.locationId || '13', // Default location
+                    price: 0 // Would need actual price
+                }],
+                locationId: request.locationId || '13',
+                total: 0, // Would need actual total
+                specialRequest: `Fulfilling request for ${request.userEmail}: ${description}`
+            };
 
-            // Refresh the request data
-            await fetchRequest(request._id);
-            toast.success('Upvoted successfully!');
-        } catch (error) {
-            console.error('Error upvoting:', error);
-            if (axios.isAxiosError(error) && error.response?.status === 401) {
-                toast.error('Authentication failed. Please log in again.');
+            // Place the order on behalf of the requester
+            const response = await axios.post(
+                `${process.env.NEXT_PUBLIC_REQUESTURL}/fulfillRequest`,
+                {
+                    ...orderData,
+                    requestId: request._id,
+                    requesterEmail: request.userEmail,
+                    fulfillerId: user.token.userId,
+                    fulfillerEmail: `${user.token.name}@scu.edu`
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            if (response.data.orderId || response.data.success) {
+                setFulfilled(true);
+                toast.success(`Request fulfilled! Order placed for ${request.userEmail}`);
+
+                // Refresh the request data
+                await fetchRequest(request._id);
             } else {
-                toast.error('Failed to upvote request');
+                toast.error('Failed to fulfill request. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error fulfilling request:', error);
+            if (axios.isAxiosError(error)) {
+                if (error.response?.status === 401) {
+                    toast.error('Authentication failed. Please log in again.');
+                } else if (error.response?.status === 400) {
+                    toast.error('Invalid request data. This item may not be available.');
+                } else {
+                    toast.error(`Failed to fulfill request: ${error.response?.data?.error || error.message}`);
+                }
+            } else {
+                toast.error('Failed to fulfill request. Please try again.');
             }
         } finally {
-            setUpvoting(false);
-        }
-    };
-
-    const handleAddComment = async () => {
-        if (!user?.token) {
-            toast.error('Please log in to add comments');
-            return;
-        }
-
-        if (!newComment.trim() || !request) return;
-
-        try {
-            setCommenting(true);
-            await axios.post(`${process.env.NEXT_PUBLIC_REQUESTURL}/addComment/${request._id}`, {
-                userId: user.token.userId,
-                loginToken: user.token.loginToken,
-                sessionId: user.token.sessionId,
-                userEmail: `${user.token.name}@scu.edu`,
-                text: newComment.trim()
-            });
-
-            setNewComment('');
-            // Refresh the request data
-            await fetchRequest(request._id);
-            toast.success('Comment added successfully!');
-        } catch (error) {
-            console.error('Error adding comment:', error);
-            toast.error('Failed to add comment');
-        } finally {
-            setCommenting(false);
+            setFulfilling(false);
         }
     };
 
@@ -249,6 +259,8 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
                 return 'bg-green-100 text-green-800';
             case 'rejected':
                 return 'bg-red-100 text-red-800';
+            case 'fulfilled':
+                return 'bg-blue-100 text-blue-800';
             default:
                 return 'bg-gray-100 text-gray-800';
         }
@@ -323,7 +335,7 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
                                         📍 {request.locationName || (request.locationId && restaurantMapping[request.locationId]) || 'Any Location'}
                                     </span>
                                     <span>📅 {formatDate(request.createdAt)}</span>
-                                    <span>👤 {request.userEmail}</span>
+                                    <span>👤 Requested by: {request.userEmail}</span>
                                 </div>
                             </div>
                             <div className="text-right">
@@ -336,100 +348,107 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
 
                     {/* Request Description */}
                     <div className="p-6 border-b">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-3">Description</h3>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-3">Request Details</h3>
                         <p className="text-gray-700 leading-relaxed">{request.description}</p>
+
+                        {request.status === 'fulfilled' && (
+                            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                <p className="text-blue-800 text-sm">
+                                    ✅ This request has been fulfilled! Someone has already ordered this item.
+                                </p>
+                            </div>
+                        )}
                     </div>
 
-                    {/* Voting Section */}
+                    {/* Fulfill Section */}
                     <div className="p-6 border-b">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-3">
+                            <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-2">Help Out</h3>
+                                <p className="text-gray-600 text-sm mb-4">
+                                    {request.status === 'fulfilled'
+                                        ? 'This request has already been fulfilled.'
+                                        : `${request.userEmail} is looking for someone to order "${request.itemName}" for them.`
+                                    }
+                                </p>
+                            </div>
+                        </div>
+
+                        {request.status !== 'fulfilled' && (
+                            <div className="flex items-center space-x-4">
                                 <button
-                                    onClick={handleUpvote}
-                                    disabled={upvoting || !user}
-                                    className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${user
-                                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    onClick={handleFulfillRequest}
+                                    disabled={fulfilling || !user || fulfilled}
+                                    className={`flex items-center space-x-2 px-6 py-3 rounded-md transition-colors font-medium ${user && !fulfilled
+                                        ? 'bg-green-600 text-white hover:bg-green-700'
+                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                         }`}
                                 >
-                                    <span>👍</span>
-                                    <span>{upvoting ? 'Upvoting...' : 'Upvote'}</span>
+                                    <span>🎯</span>
+                                    <span>
+                                        {fulfilling
+                                            ? 'Fulfilling Request...'
+                                            : fulfilled
+                                                ? 'Request Fulfilled!'
+                                                : 'Fulfill This Request'
+                                        }
+                                    </span>
                                 </button>
-                                <span className="text-lg font-semibold text-gray-700">
-                                    {request.upvotes} upvote{request.upvotes !== 1 ? 's' : ''}
-                                </span>
-                            </div>
-                            {!user && (
-                                <p className="text-sm text-gray-500">
-                                    <Link href="/login" className="text-indigo-600 hover:text-indigo-800">Log in</Link> to upvote and comment
-                                </p>
-                            )}
-                        </div>
-                    </div>
 
-                    {/* Comments Section */}
-                    <div className="p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                            Comments ({request.comments?.length || 0})
-                        </h3>
-
-                        {/* Add Comment (if logged in) */}
-                        {user && (
-                            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                                <textarea
-                                    value={newComment}
-                                    onChange={(e) => setNewComment(e.target.value)}
-                                    placeholder="Add a comment..."
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
-                                    rows={3}
-                                />
-                                <div className="mt-2 flex justify-end">
-                                    <button
-                                        onClick={handleAddComment}
-                                        disabled={commenting || !newComment.trim()}
-                                        className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                                    >
-                                        {commenting ? 'Adding...' : 'Add Comment'}
-                                    </button>
-                                </div>
+                                {user && (
+                                    <div className="text-sm text-gray-600">
+                                        <p>This will place an order for <strong>{request.userEmail}</strong></p>
+                                        <p className="text-xs text-gray-500 mt-1">Youll be charged for this order</p>
+                                    </div>
+                                )}
                             </div>
                         )}
 
-                        {/* Comments List */}
-                        <div className="space-y-4">
-                            {request.comments && request.comments.length > 0 ? (
-                                request.comments.map((comment, index) => (
-                                    <div key={index} className="border-l-4 border-indigo-200 pl-4 py-2">
-                                        <div className="flex justify-between items-start mb-1">
-                                            <span className="font-medium text-gray-900">{comment.userEmail}</span>
-                                            <span className="text-sm text-gray-500">{formatDate(comment.createdAt)}</span>
-                                        </div>
-                                        <p className="text-gray-700">{comment.text}</p>
-                                    </div>
-                                ))
-                            ) : (
-                                <p className="text-gray-500 text-center py-8">No comments yet. Be the first to comment!</p>
-                            )}
-                        </div>
+                        {!user && request.status !== 'fulfilled' && (
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <p className="text-gray-600 text-center">
+                                    <Link href="/login" className="text-indigo-600 hover:text-indigo-800 font-medium">
+                                        Log in
+                                    </Link> to fulfill this request and help out {request.userEmail}!
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* Call to Action */}
-                <div className="mt-8 bg-indigo-50 rounded-lg p-6 text-center">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Like this idea?</h3>
+                <div className="mt-8 bg-green-50 rounded-lg p-6 text-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        {request.status === 'fulfilled' ? 'Request Completed!' : 'Help Someone Out!'}
+                    </h3>
                     <p className="text-gray-600 mb-4">
-                        Help make it happen by upvoting and sharing with others!
+                        {request.status === 'fulfilled'
+                            ? `Someone has fulfilled this request for ${request.userEmail}. Thanks to everyone who helped!`
+                            : `${request.userEmail} is hoping someone can order "${request.itemName}" for them. Can you help?`
+                        }
                     </p>
                     <div className="flex justify-center space-x-4">
+                        {request.status !== 'fulfilled' && (
+                            <button
+                                onClick={handleFulfillRequest}
+                                disabled={!user || fulfilling || fulfilled}
+                                className={`px-6 py-3 rounded-md transition-colors font-medium ${user && !fulfilled
+                                    ? 'bg-green-600 text-white hover:bg-green-700'
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    }`}
+                            >
+                                {fulfilling ? 'Fulfilling...' : fulfilled ? 'Fulfilled!' : 'Fulfill Request'}
+                            </button>
+                        )}
                         <button
                             onClick={() => setShowShareModal(true)}
-                            className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+                            className="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 transition-colors font-medium"
                         >
-                            Share This Request
+                            Share Request
                         </button>
                         <Link
                             href="/menu"
-                            className="bg-white text-indigo-600 border border-indigo-600 px-6 py-2 rounded-md hover:bg-indigo-50 transition-colors"
+                            className="bg-white text-indigo-600 border border-indigo-600 px-6 py-3 rounded-md hover:bg-indigo-50 transition-colors font-medium"
                         >
                             Browse Menu
                         </Link>
@@ -464,8 +483,8 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
                                     <button
                                         onClick={copyToClipboard}
                                         className={`px-4 py-2 rounded-r-md transition-colors ${copySuccess
-                                                ? 'bg-green-600 text-white'
-                                                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                            ? 'bg-green-600 text-white'
+                                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
                                             }`}
                                     >
                                         {copySuccess ? '✓' : 'Copy'}
