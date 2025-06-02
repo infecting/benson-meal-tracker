@@ -1,7 +1,6 @@
 import express, { Express, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { MobileOrderClient } from "./request";
-import { auth, requiresAuth } from "express-openid-connect";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import {
@@ -78,223 +77,194 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const config = {
-    authRequired: false,
-    auth0Logout: true,
-    secret: process.env.AUTH0_SECRET!,
-    baseURL: process.env.AUTH0_BASE_URL!,
-    clientID: process.env.AUTH0_CLIENT_ID!,
-    issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL!,
-    clientSecret: process.env.AUTH0_CLIENT_SECRET!,
-    authorizationParams: {
-        response_type: "code",
-        scope: "openid profile email",
-        connection: "google-oauth2", // Only Allows Google login
-    },
-};
-
-// Attach Auth0 routes
-app.use(auth(config));
-
-// Authentication check middleware - FIXED VERSION
-const checkAuthentication = (
-    req: Request,
-    res: Response,
-    next: NextFunction
-): void => {
-    if (!(req as any).oidc.isAuthenticated()) {
-        res.status(401).json({ error: "Authentication required" });
-        return; // Important: return here to prevent calling next()
-    }
-    next();
-};
-
 // Helper to validate SCU user token
 const validateSCUToken = (req: Request): boolean => {
     return !!(req.body.userId && req.body.loginToken && req.body.sessionId);
 };
 
+// Helper to validate user email
+const validateUserEmail = (req: Request): boolean => {
+    return !!(req.body.userEmail && req.body.userEmail.includes("@"));
+};
+
 // Home route
 app.get("/", (req: Request, res: Response) => {
-    const oidcReq = req as any; // Type assertion for oidc properties
-    res.send(
-        oidcReq.oidc.isAuthenticated()
-            ? `Logged in as ${oidcReq.oidc.user?.name} <a href="/logout">Logout</a>`
-            : `Not logged in. <a href="/login">Login</a>`
-    );
+    res.send("SCU Mobile Order API Server");
 });
 
-// Protected route
-app.get("/profile", requiresAuth(), (req: Request, res: Response) => {
-    const oidcReq = req as any;
-    res.send(`<pre>${JSON.stringify(oidcReq.oidc.user, null, 2)}</pre>`);
+app.post("/scheduleOrder", async (req: Request, res: Response) => {
+    try {
+        // Validate required fields
+        const {
+            userEmail,
+            locationId,
+            locationName,
+            items,
+            scheduledTime,
+            notes,
+        } = req.body;
+
+        if (!userEmail || !locationId || !items || !scheduledTime) {
+            res.status(400).json({
+                error:
+                    "Missing required fields: userEmail, locationId, items, and scheduledTime are required",
+            });
+            return;
+        }
+
+        // Validate user email format
+        if (!validateUserEmail(req)) {
+            res.status(400).json({
+                error: "Valid user email is required",
+            });
+            return;
+        }
+
+        // Validate SCU credentials
+        if (!validateSCUToken(req)) {
+            res.status(400).json({
+                error: "SCU login credentials required",
+            });
+            return;
+        }
+
+        // Create the schedule order
+        const newScheduledOrder = new ScheduleOrder({
+            userId: req.body.userId,
+            userEmail,
+            locationId,
+            locationName,
+            items,
+            scheduledTime: new Date(scheduledTime),
+            notes: notes || "",
+        });
+
+        // Save to database
+        const savedOrder = await newScheduledOrder.save();
+
+        // Return the order with ID for frontend reference
+        res.status(201).json({
+            message: "Order scheduled successfully",
+            id: savedOrder._id,
+            scheduledOrder: savedOrder,
+        });
+    } catch (error) {
+        console.error("Error scheduling order:", error);
+        res.status(500).json({
+            error: "Failed to schedule order",
+            details: (error as Error).message,
+        });
+    }
 });
 
-app.post(
-    "/scheduleOrder",
-    checkAuthentication,
-    async (req: Request, res: Response) => {
-        try {
-            // Validate required fields
-            const {
-                locationId,
-                locationName,
-                items,
-                scheduledTime,
-                notes,
-            } = req.body;
+app.post("/requestItem", async (req: Request, res: Response) => {
+    try {
+        // Validate required fields
+        const {
+            userEmail,
+            itemName,
+            description,
+            locationId,
+            locationName,
+        } = req.body;
 
-            if (!locationId || !items || !scheduledTime) {
-                res.status(400).json({
-                    error:
-                        "Missing required fields: locationId, items, and scheduledTime are required",
-                });
-            }
-
-            // Validate SCU credentials
-            if (!validateSCUToken(req)) {
-                res.status(400).json({
-                    error: "SCU login credentials required",
-                });
-            }
-
-            const oidcReq = req as any;
-
-            // Create the schedule order
-            const newScheduledOrder = new ScheduleOrder({
-                userId: req.body.userId,
-                userEmail: oidcReq.oidc.user.email,
-                locationId,
-                locationName,
-                items,
-                scheduledTime: new Date(scheduledTime),
-                notes: notes || "",
+        if (!userEmail || !itemName || !description) {
+            res.status(400).json({
+                error:
+                    "Missing required fields: userEmail, itemName and description are required",
             });
-
-            // Save to database
-            const savedOrder = await newScheduledOrder.save();
-
-            // Return the order with ID for frontend reference
-            res.status(201).json({
-                message: "Order scheduled successfully",
-                id: savedOrder._id,
-                scheduledOrder: savedOrder,
-            });
-        } catch (error) {
-            console.error("Error scheduling order:", error);
-            res.status(500).json({
-                error: "Failed to schedule order",
-                details: (error as Error).message,
-            });
+            return;
         }
-    }
-);
 
-app.post(
-    "/requestItem",
-    checkAuthentication,
-    async (req: Request, res: Response) => {
-        try {
-            // Validate required fields
-            const {
-                itemName,
-                description,
-                locationId,
-                locationName,
-            } = req.body;
-
-            if (!itemName || !description) {
-                res.status(400).json({
-                    error:
-                        "Missing required fields: itemName and description are required",
-                });
-            }
-
-            // Validate SCU credentials
-            if (!validateSCUToken(req)) {
-                res.status(400).json({
-                    error: "SCU login credentials required",
-                });
-            }
-
-            const oidcReq = req as any;
-
-            // Create the item request
-            const newRequestItem = new RequestItem({
-                userId: req.body.userId,
-                userEmail: oidcReq.oidc.user.email,
-                itemName,
-                locationId: locationId || null,
-                locationName: locationName || null,
-                description,
+        // Validate user email format
+        if (!validateUserEmail(req)) {
+            res.status(400).json({
+                error: "Valid user email is required",
             });
-
-            // Save to database
-            const savedRequest = await newRequestItem.save();
-
-            // Return the request with ID for frontend reference
-            res.status(201).json({
-                message: "Item request submitted successfully",
-                id: savedRequest._id,
-                itemRequest: savedRequest,
-            });
-        } catch (error) {
-            console.error("Error requesting item:", error);
-            res.status(500).json({
-                error: "Failed to submit item request",
-                details: (error as Error).message,
-            });
+            return;
         }
+
+        // Validate SCU credentials
+        if (!validateSCUToken(req)) {
+            res.status(400).json({
+                error: "SCU login credentials required",
+            });
+            return;
+        }
+
+        // Create the item request
+        const newRequestItem = new RequestItem({
+            userId: req.body.userId,
+            userEmail,
+            itemName,
+            locationId: locationId || null,
+            locationName: locationName || null,
+            description,
+        });
+
+        // Save to database
+        const savedRequest = await newRequestItem.save();
+
+        // Return the request with ID for frontend reference
+        res.status(201).json({
+            message: "Item request submitted successfully",
+            id: savedRequest._id,
+            itemRequest: savedRequest,
+        });
+    } catch (error) {
+        console.error("Error requesting item:", error);
+        res.status(500).json({
+            error: "Failed to submit item request",
+            details: (error as Error).message,
+        });
     }
-);
+});
 
 // Get scheduled orders for current user
-app.get(
-    "/myScheduledOrders",
-    checkAuthentication,
-    async (req: Request, res: Response) => {
-        try {
-            if (!validateSCUToken(req)) {
-                res.status(400).json({
-                    error: "SCU login credentials required",
-                });
-            }
+app.get("/myScheduledOrders", async (req: Request, res: Response) => {
+    try {
+        const { userEmail } = req.query;
 
-            const orders = await ScheduleOrder.find({
-                userId: req.body.userId,
-            }).sort({ scheduledTime: -1 });
-
-            res.json(orders);
-        } catch (error) {
-            console.error("Error fetching scheduled orders:", error);
-            res.status(500).json({ error: "Failed to fetch scheduled orders" });
+        if (!userEmail) {
+            res.status(400).json({
+                error: "User email is required",
+            });
+            return;
         }
+
+        const orders = await ScheduleOrder.find({
+            userEmail: userEmail,
+        }).sort({ scheduledTime: -1 });
+
+        res.json(orders);
+    } catch (error) {
+        console.error("Error fetching scheduled orders:", error);
+        res.status(500).json({ error: "Failed to fetch scheduled orders" });
     }
-);
+});
 
 // Get item requests for current user
-app.get(
-    "/myItemRequests",
-    checkAuthentication,
-    async (req: Request, res: Response) => {
-        try {
-            if (!validateSCUToken(req)) {
-                res.status(400).json({
-                    error: "SCU login credentials required",
-                });
-            }
+app.get("/myItemRequests", async (req: Request, res: Response) => {
+    try {
+        const { userEmail } = req.query;
 
-            const requests = await RequestItem.find({
-                userId: req.body.userId,
-            }).sort({ createdAt: -1 });
-
-            res.json(requests);
-        } catch (error) {
-            console.error("Error fetching item requests:", error);
-            res.status(500).json({ error: "Failed to fetch item requests" });
+        if (!userEmail) {
+            res.status(400).json({
+                error: "User email is required",
+            });
+            return;
         }
+
+        const requests = await RequestItem.find({
+            userEmail: userEmail,
+        }).sort({ createdAt: -1 });
+
+        res.json(requests);
+    } catch (error) {
+        console.error("Error fetching item requests:", error);
+        res.status(500).json({ error: "Failed to fetch item requests" });
     }
-);
+});
 
 // Get all public item requests (for voting)
 app.get("/publicItemRequests", async (req: Request, res: Response) => {
@@ -313,13 +283,22 @@ app.get("/publicItemRequests", async (req: Request, res: Response) => {
 // Upvote an item request
 app.post(
     "/upvoteItemRequest/:requestId",
-    checkAuthentication,
     async (req: Request, res: Response) => {
         try {
+            const { userEmail } = req.body;
+
+            if (!userEmail) {
+                res.status(400).json({
+                    error: "User email is required",
+                });
+                return;
+            }
+
             const request = await RequestItem.findById(req.params.requestId);
 
             if (!request) {
                 res.status(404).json({ error: "Item request not found" });
+                return;
             }
 
             request.upvotes += 1;
@@ -352,7 +331,7 @@ app.post("/mobileOrder/login", async (req: Request, res: Response) => {
         res.json({ token: loginResp });
     } catch (e) {
         console.log((e as Error).message);
-        res.json({ error: (e as Error).message });
+        res.status(400).json({ error: (e as Error).message });
     }
 });
 

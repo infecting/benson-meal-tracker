@@ -1,5 +1,6 @@
 import Image from "next/image";
 import React, { useState } from "react";
+import img from "../public/dining.png"
 
 // Modified component to accept placeData as a prop with default value
 const DiningPlaceMap = ({ placeData = {
@@ -64,7 +65,7 @@ const DiningPlaceMap = ({ placeData = {
             <div className="relative w-full max-w-2xl bg-white rounded-lg shadow-md p-4">
                 {/* Floor Plan as the base layer */}
                 <Image
-                    src="dining.png"
+                    src={img}
                     alt="Campus Dining Floor Plan"
                     className="w-full h-auto border border-gray-200 rounded"
                 />
