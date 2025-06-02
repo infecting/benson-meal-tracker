@@ -25,6 +25,17 @@ const connectDB = async () => {
 };
 
 // Define Schemas
+const userSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true },
+    loginToken: { type: String, required: true },
+    sessionId: { type: String, required: true },
+    name: { type: String, required: true },
+    email: { type: String },
+    createdAt: { type: Date, default: Date.now },
+    lastLogin: { type: Date, default: Date.now },
+    isActive: { type: Boolean, default: true },
+});
+
 const scheduleOrderSchema = new mongoose.Schema({
     userId: { type: String, required: true },
     userEmail: { type: String, required: true },
@@ -66,6 +77,7 @@ const requestItemSchema = new mongoose.Schema({
 });
 
 // Create models
+const User = mongoose.model("User", userSchema);
 const ScheduleOrder = mongoose.model("ScheduleOrder", scheduleOrderSchema);
 const RequestItem = mongoose.model("RequestItem", requestItemSchema);
 
@@ -77,9 +89,27 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Helper to validate SCU user token
-const validateSCUToken = (req: Request): boolean => {
-    return !!(req.body.userId && req.body.loginToken && req.body.sessionId);
+// Helper to validate and authenticate user token
+const authenticateUser = async (req: Request): Promise<any> => {
+    const { userId, loginToken, sessionId } = req.body;
+
+    if (!userId || !loginToken || !sessionId) {
+        throw new Error("Missing authentication credentials");
+    }
+
+    // Find user in database and verify token
+    const user = await User.findOne({
+        userId: userId,
+        loginToken: loginToken,
+        sessionId: sessionId,
+        isActive: true,
+    });
+
+    if (!user) {
+        throw new Error("Invalid or expired authentication token");
+    }
+
+    return user;
 };
 
 // Helper to validate user email
@@ -92,8 +122,53 @@ app.get("/", (req: Request, res: Response) => {
     res.send("SCU Mobile Order API Server");
 });
 
+app.post("/mobileOrder/login", async (req: Request, res: Response) => {
+    try {
+        let client = new MobileOrderClient(
+            { username: req.body.username, password: req.body.password },
+            {
+                baseApiUrl: "https://mobileorderprodapi.transactcampus.com",
+                baseIdpUrl: "https://login.scu.edu",
+                campusId: "4",
+                secretKey: "dFz9Dq435BT3xCVU2PCy",
+            }
+        );
+        const loginResp = await client.login();
+        console.log("Login response:", loginResp);
+
+        // Store or update user in database
+        const userData = {
+            userId: loginResp.userId.toString(),
+            loginToken: loginResp.loginToken,
+            sessionId: loginResp.sessionId,
+            name: loginResp.name,
+            email: `${loginResp.name}@scu.edu`, // Assuming SCU email format
+            lastLogin: new Date(),
+            isActive: true,
+        };
+
+        // Use upsert to create or update user
+        await User.findOneAndUpdate({ userId: userData.userId }, userData, {
+            upsert: true,
+            new: true,
+        });
+
+        console.log(
+            `User ${userData.name} (${userData.userId}) logged in and stored in database`
+        );
+
+        res.json({ token: loginResp });
+    } catch (e) {
+        console.log((e as Error).message);
+        res.status(400).json({ error: (e as Error).message });
+    }
+});
+
 app.post("/scheduleOrder", async (req: Request, res: Response) => {
     try {
+        // Authenticate user first
+        const user = await authenticateUser(req);
+
         // Validate required fields
         const {
             userEmail,
@@ -112,26 +187,10 @@ app.post("/scheduleOrder", async (req: Request, res: Response) => {
             return;
         }
 
-        // Validate user email format
-        if (!validateUserEmail(req)) {
-            res.status(400).json({
-                error: "Valid user email is required",
-            });
-            return;
-        }
-
-        // Validate SCU credentials
-        if (!validateSCUToken(req)) {
-            res.status(400).json({
-                error: "SCU login credentials required",
-            });
-            return;
-        }
-
         // Create the schedule order
         const newScheduledOrder = new ScheduleOrder({
-            userId: req.body.userId,
-            userEmail,
+            userId: user.userId,
+            userEmail: user.email || userEmail,
             locationId,
             locationName,
             items,
@@ -150,15 +209,25 @@ app.post("/scheduleOrder", async (req: Request, res: Response) => {
         });
     } catch (error) {
         console.error("Error scheduling order:", error);
-        res.status(500).json({
-            error: "Failed to schedule order",
-            details: (error as Error).message,
-        });
+        if ((error as Error).message.includes("authentication")) {
+            res.status(401).json({
+                error: "Authentication failed",
+                details: (error as Error).message,
+            });
+        } else {
+            res.status(500).json({
+                error: "Failed to schedule order",
+                details: (error as Error).message,
+            });
+        }
     }
 });
 
 app.post("/requestItem", async (req: Request, res: Response) => {
     try {
+        // Authenticate user first
+        const user = await authenticateUser(req);
+
         // Validate required fields
         const {
             userEmail,
@@ -168,34 +237,18 @@ app.post("/requestItem", async (req: Request, res: Response) => {
             locationName,
         } = req.body;
 
-        if (!userEmail || !itemName || !description) {
+        if (!itemName || !description) {
             res.status(400).json({
                 error:
-                    "Missing required fields: userEmail, itemName and description are required",
-            });
-            return;
-        }
-
-        // Validate user email format
-        if (!validateUserEmail(req)) {
-            res.status(400).json({
-                error: "Valid user email is required",
-            });
-            return;
-        }
-
-        // Validate SCU credentials
-        if (!validateSCUToken(req)) {
-            res.status(400).json({
-                error: "SCU login credentials required",
+                    "Missing required fields: itemName and description are required",
             });
             return;
         }
 
         // Create the item request
         const newRequestItem = new RequestItem({
-            userId: req.body.userId,
-            userEmail,
+            userId: user.userId,
+            userEmail: user.email || userEmail,
             itemName,
             locationId: locationId || null,
             locationName: locationName || null,
@@ -213,60 +266,129 @@ app.post("/requestItem", async (req: Request, res: Response) => {
         });
     } catch (error) {
         console.error("Error requesting item:", error);
-        res.status(500).json({
-            error: "Failed to submit item request",
-            details: (error as Error).message,
-        });
+        if ((error as Error).message.includes("authentication")) {
+            res.status(401).json({
+                error: "Authentication failed",
+                details: (error as Error).message,
+            });
+        } else {
+            res.status(500).json({
+                error: "Failed to submit item request",
+                details: (error as Error).message,
+            });
+        }
     }
 });
 
 // Get scheduled orders for current user
-app.get("/myScheduledOrders", async (req: Request, res: Response) => {
+app.post("/myScheduledOrders", async (req: Request, res: Response) => {
     try {
-        const { userEmail } = req.query;
-
-        if (!userEmail) {
-            res.status(400).json({
-                error: "User email is required",
-            });
-            return;
-        }
+        // Authenticate user first
+        const user = await authenticateUser(req);
 
         const orders = await ScheduleOrder.find({
-            userEmail: userEmail,
+            userId: user.userId,
         }).sort({ scheduledTime: -1 });
 
         res.json(orders);
     } catch (error) {
         console.error("Error fetching scheduled orders:", error);
-        res.status(500).json({ error: "Failed to fetch scheduled orders" });
+        if ((error as Error).message.includes("authentication")) {
+            res.status(401).json({
+                error: "Authentication failed",
+                details: (error as Error).message,
+            });
+        } else {
+            res.status(500).json({ error: "Failed to fetch scheduled orders" });
+        }
     }
 });
 
 // Get item requests for current user
-app.get("/myItemRequests", async (req: Request, res: Response) => {
+app.post("/myItemRequests", async (req: Request, res: Response) => {
     try {
-        const { userEmail } = req.query;
-
-        if (!userEmail) {
-            res.status(400).json({
-                error: "User email is required",
-            });
-            return;
-        }
+        // Authenticate user first
+        const user = await authenticateUser(req);
 
         const requests = await RequestItem.find({
-            userEmail: userEmail,
+            userId: user.userId,
         }).sort({ createdAt: -1 });
 
         res.json(requests);
     } catch (error) {
         console.error("Error fetching item requests:", error);
-        res.status(500).json({ error: "Failed to fetch item requests" });
+        if ((error as Error).message.includes("authentication")) {
+            res.status(401).json({
+                error: "Authentication failed",
+                details: (error as Error).message,
+            });
+        } else {
+            res.status(500).json({ error: "Failed to fetch item requests" });
+        }
     }
 });
 
-// Get all public item requests (for voting)
+// Get a specific scheduled order by ID
+app.post("/getScheduledOrder/:orderId", async (req: Request, res: Response) => {
+    try {
+        // Authenticate user first
+        const user = await authenticateUser(req);
+
+        const order = await ScheduleOrder.findOne({
+            _id: req.params.orderId,
+            userId: user.userId, // Ensure user can only access their own orders
+        });
+
+        if (!order) {
+            res.status(404).json({ error: "Scheduled order not found" });
+            return;
+        }
+
+        res.json(order);
+    } catch (error) {
+        console.error("Error fetching scheduled order:", error);
+        if ((error as Error).message.includes("authentication")) {
+            res.status(401).json({
+                error: "Authentication failed",
+                details: (error as Error).message,
+            });
+        } else {
+            res.status(500).json({ error: "Failed to fetch scheduled order" });
+        }
+    }
+});
+
+// Get a specific item request by ID
+app.post("/getItemRequest/:requestId", async (req: Request, res: Response) => {
+    try {
+        // Authenticate user first
+        const user = await authenticateUser(req);
+
+        const request = await RequestItem.findOne({
+            _id: req.params.requestId,
+            userId: user.userId, // Ensure user can only access their own requests
+        });
+
+        if (!request) {
+            res.status(404).json({ error: "Item request not found" });
+            return;
+        }
+
+        res.json(request);
+    } catch (error) {
+        console.error("Error fetching item request:", error);
+        if ((error as Error).message.includes("authentication")) {
+            res.status(401).json({
+                error: "Authentication failed",
+                details: (error as Error).message,
+            });
+        } else {
+            res.status(500).json({ error: "Failed to fetch item request" });
+        }
+    }
+});
+
+// Get all public item requests (for voting) - no auth needed
 app.get("/publicItemRequests", async (req: Request, res: Response) => {
     try {
         const requests = await RequestItem.find()
@@ -285,14 +407,8 @@ app.post(
     "/upvoteItemRequest/:requestId",
     async (req: Request, res: Response) => {
         try {
-            const { userEmail } = req.body;
-
-            if (!userEmail) {
-                res.status(400).json({
-                    error: "User email is required",
-                });
-                return;
-            }
+            // Authenticate user first
+            const user = await authenticateUser(req);
 
             const request = await RequestItem.findById(req.params.requestId);
 
@@ -310,33 +426,70 @@ app.post(
             });
         } catch (error) {
             console.error("Error upvoting request:", error);
-            res.status(500).json({ error: "Failed to upvote request" });
+            if ((error as Error).message.includes("authentication")) {
+                res.status(401).json({
+                    error: "Authentication failed",
+                    details: (error as Error).message,
+                });
+            } else {
+                res.status(500).json({ error: "Failed to upvote request" });
+            }
         }
     }
 );
 
-app.post("/mobileOrder/login", async (req: Request, res: Response) => {
+// Get user profile
+app.post("/getUserProfile", async (req: Request, res: Response) => {
     try {
-        let client = new MobileOrderClient(
-            { username: req.body.username, password: req.body.password },
-            {
-                baseApiUrl: "https://mobileorderprodapi.transactcampus.com",
-                baseIdpUrl: "https://login.scu.edu",
-                campusId: "4",
-                secretKey: "dFz9Dq435BT3xCVU2PCy",
-            }
-        );
-        const loginResp = await client.login();
-        console.log(loginResp);
-        res.json({ token: loginResp });
-    } catch (e) {
-        console.log((e as Error).message);
-        res.status(400).json({ error: (e as Error).message });
+        // Authenticate user first
+        const user = await authenticateUser(req);
+
+        // Return user data without sensitive info
+        res.json({
+            userId: user.userId,
+            name: user.name,
+            email: user.email,
+            createdAt: user.createdAt,
+            lastLogin: user.lastLogin,
+        });
+    } catch (error) {
+        console.error("Error fetching user profile:", error);
+        if ((error as Error).message.includes("authentication")) {
+            res.status(401).json({
+                error: "Authentication failed",
+                details: (error as Error).message,
+            });
+        } else {
+            res.status(500).json({ error: "Failed to fetch user profile" });
+        }
+    }
+});
+
+// Invalidate user session (logout)
+app.post("/logout", async (req: Request, res: Response) => {
+    try {
+        const { userId } = req.body;
+
+        if (!userId) {
+            res.status(400).json({ error: "User ID is required" });
+            return;
+        }
+
+        // Mark user as inactive or remove the session
+        await User.findOneAndUpdate({ userId: userId }, { isActive: false });
+
+        res.json({ message: "Logged out successfully" });
+    } catch (error) {
+        console.error("Error logging out:", error);
+        res.status(500).json({ error: "Failed to logout" });
     }
 });
 
 app.post("/getPastOrders", async (req: Request, res: Response) => {
     try {
+        // Authenticate user first
+        await authenticateUser(req);
+
         let client = new MobileOrderClient(
             {
                 baseApiUrl: "https://mobileorderprodapi.transactcampus.com",
@@ -355,12 +508,19 @@ app.post("/getPastOrders", async (req: Request, res: Response) => {
         res.json(pastOrders);
     } catch (e) {
         console.log((e as Error).message);
-        res.json({ error: (e as Error).message });
+        if ((e as Error).message.includes("authentication")) {
+            res.status(401).json({ error: (e as Error).message });
+        } else {
+            res.json({ error: (e as Error).message });
+        }
     }
 });
 
 app.post("/order", async (req: Request, res: Response) => {
     try {
+        // Authenticate user first
+        await authenticateUser(req);
+
         let client = new MobileOrderClient(
             {
                 baseApiUrl: "https://mobileorderprodapi.transactcampus.com",
@@ -390,12 +550,19 @@ app.post("/order", async (req: Request, res: Response) => {
         res.json({ orderId: orderId });
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: "Failed to process order" });
+        if ((e as Error).message.includes("authentication")) {
+            res.status(401).json({ error: (e as Error).message });
+        } else {
+            res.status(500).json({ error: "Failed to process order" });
+        }
     }
 });
 
 app.post("/orderStatus", async (req: Request, res: Response) => {
     try {
+        // Authenticate user first
+        await authenticateUser(req);
+
         let client = new MobileOrderClient(
             {
                 baseApiUrl: "https://mobileorderprodapi.transactcampus.com",
@@ -414,12 +581,19 @@ app.post("/orderStatus", async (req: Request, res: Response) => {
         res.json(r);
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: "Failed to check order status" });
+        if ((e as Error).message.includes("authentication")) {
+            res.status(401).json({ error: (e as Error).message });
+        } else {
+            res.status(500).json({ error: "Failed to check order status" });
+        }
     }
 });
 
 app.post("/getWrapped", async (req: Request, res: Response) => {
     try {
+        // Authenticate user first
+        await authenticateUser(req);
+
         let client = new MobileOrderClient(
             {
                 baseApiUrl: "https://mobileorderprodapi.transactcampus.com",
@@ -449,12 +623,19 @@ app.post("/getWrapped", async (req: Request, res: Response) => {
         });
     } catch (e) {
         console.log((e as Error).message);
-        res.json({ error: (e as Error).message });
+        if ((e as Error).message.includes("authentication")) {
+            res.status(401).json({ error: (e as Error).message });
+        } else {
+            res.json({ error: (e as Error).message });
+        }
     }
 });
 
 app.post("/getMenu", async (req: Request, res: Response) => {
     try {
+        // Authenticate user first
+        await authenticateUser(req);
+
         let client = new MobileOrderClient(
             {
                 baseApiUrl: "https://mobileorderprodapi.transactcampus.com",
@@ -474,7 +655,11 @@ app.post("/getMenu", async (req: Request, res: Response) => {
         res.json(finalMenu);
     } catch (e) {
         console.log((e as Error).message);
-        res.json({ error: (e as Error).message });
+        if ((e as Error).message.includes("authentication")) {
+            res.status(401).json({ error: (e as Error).message });
+        } else {
+            res.json({ error: (e as Error).message });
+        }
     }
 });
 

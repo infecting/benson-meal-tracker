@@ -133,6 +133,7 @@ export class MobileOrderClient {
                 userId: this.state.userId,
                 sessionId: this.state.sessionId,
                 loginToken: this.state.loginToken,
+                name: this.credentials.username,
             };
         } catch (error) {
             console.error("Login failed:", error);
