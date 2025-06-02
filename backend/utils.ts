@@ -239,3 +239,26 @@ function cleanOptions(options: any) {
     }
     return final;
 }
+export function getAverageOrderValue(pastOrders: any): number {
+    const total = moneySpent(pastOrders);
+    const count = pastOrders.orders.length;
+    return count ? total / count : 0;
+}
+
+export function getUniqueItems(pastOrders: any): string[] {
+    const items = new Set<string>();
+    for (let order of pastOrders.orders) {
+        order.items?.forEach(item => items.add(item.name));
+    }
+    return Array.from(items);
+}
+
+export function getOrderFrequency(pastOrders: any): number {
+    const orders = pastOrders.orders;
+    if (orders.length < 2) return orders.length;
+
+    const dates = orders.map(o => new Date(o.pickup_datetime || o.order_local_time)).sort((a, b) => a.getTime() - b.getTime());
+    const timeSpanDays = (dates[dates.length - 1].getTime() - dates[0].getTime()) / (1000 * 60 * 60 * 24);
+
+    return timeSpanDays > 0 ? orders.length / (timeSpanDays / 7) : orders.length;
+}
