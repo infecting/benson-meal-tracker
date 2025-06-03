@@ -2,12 +2,14 @@ import { Metadata } from 'next';
 import RequestPageClient from '../../../../components/RequestPageClient';
 
 interface RequestPageProps {
-    params: { requestId: string }
+    params: Promise<{ requestId: string }>
 }
 
 // Server component - handles metadata
 export async function generateMetadata({ params }: RequestPageProps): Promise<Metadata> {
-    console.log(params);
+    const { requestId } = await params;
+    console.log({ requestId });
+
     return {
         title: 'Menu Item Request',
         description: 'View and support this menu item request',
@@ -20,6 +22,7 @@ export async function generateMetadata({ params }: RequestPageProps): Promise<Me
 }
 
 // Server component wrapper
-export default function RequestPage({ params }: RequestPageProps) {
-    return <RequestPageClient requestId={params.requestId} />;
+export default async function RequestPage({ params }: RequestPageProps) {
+    const { requestId } = await params;
+    return <RequestPageClient requestId={requestId} />;
 }
