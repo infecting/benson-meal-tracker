@@ -33,6 +33,7 @@ interface ItemRequest {
     createdAt: string;
     status: 'pending' | 'approved' | 'rejected' | 'fulfilled';
     upvotes: number;
+    barcode?: string; // Add barcode field
 }
 
 interface UserData {
@@ -48,6 +49,110 @@ interface RequestPageClientProps {
     requestId: string;
 }
 
+// Barcode component
+// If you want to use a proper barcode library, install JsBarcode:
+// npm install jsbarcode
+// npm install @types/jsbarcode
+
+import JsBarcode from 'jsbarcode';
+
+// Professional Barcode component using JsBarcode library
+const BarcodeDisplay: React.FC<{ barcode: string; itemName: string }> = ({ barcode, itemName }) => {
+    const canvasRef = React.useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        if (canvasRef.current && barcode) {
+            try {
+                JsBarcode(canvasRef.current, barcode, {
+                    format: "CODE128",
+                    width: 2,
+                    height: 80,
+                    displayValue: true,
+                    fontSize: 12,
+                    margin: 10,
+                    background: "#ffffff",
+                    lineColor: "#000000"
+                });
+            } catch (error) {
+                console.error('Error generating barcode:', error);
+                // Fallback to simple text display
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    canvas.width = 300;
+                    canvas.height = 100;
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, 300, 100);
+                    ctx.fillStyle = 'black';
+                    ctx.font = '16px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Barcode Error', 150, 40);
+                    ctx.fillText(barcode, 150, 70);
+                }
+            }
+        }
+    }, [barcode]);
+
+    return (
+        <div className="bg-white p-6 rounded-lg border-2 border-gray-200 text-center">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Order Barcode</h3>
+            <div className="mb-4 flex justify-center">
+                <canvas
+                    ref={canvasRef}
+                    className="border border-gray-200 rounded"
+                    style={{ maxWidth: '100%', height: 'auto' }}
+                />
+            </div>
+            <p className="text-sm text-gray-600 mb-2">
+                Order Code: <code className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">{barcode}</code>
+            </p>
+            <p className="text-xs text-gray-500">Show this barcode when picking up your order</p>
+            <div className="mt-3 flex justify-center space-x-2">
+                <button
+                    onClick={() => {
+                        if (canvasRef.current) {
+                            const link = document.createElement('a');
+                            link.download = `order-${barcode}.png`;
+                            link.href = canvasRef.current.toDataURL();
+                            link.click();
+                        }
+                    }}
+                    className="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded hover:bg-gray-200 transition-colors"
+                >
+                    💾 Download
+                </button>
+                <button
+                    onClick={async () => {
+                        if (canvasRef.current) {
+                            try {
+                                const blob = await new Promise<Blob>((resolve) => {
+                                    canvasRef.current!.toBlob((blob) => resolve(blob!));
+                                });
+                                await navigator.share({
+                                    files: [new File([blob], `order-${barcode}.png`, { type: 'image/png' })],
+                                    title: 'Order Barcode',
+                                    text: `Order barcode for ${itemName}`
+                                });
+                            } catch (error) {
+                                console.error('Sharing not supported:', error);
+                                // Fallback to copying barcode text
+                                try {
+                                    await navigator.clipboard.writeText(barcode);
+                                    alert('Barcode copied to clipboard!');
+                                } catch (clipboardError) {
+                                    alert('Sharing not supported on this device');
+                                }
+                            }
+                        }
+                    }}
+                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition-colors"
+                >
+                    📤 Share
+                </button>
+            </div>
+        </div>
+    );
+};
 export default function RequestPageClient({ requestId }: RequestPageClientProps) {
     const [request, setRequest] = useState<ItemRequest | null>(null);
     const [loading, setLoading] = useState(true);
@@ -77,6 +182,12 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
             fetchRequest(requestId);
         }
     }, [requestId]);
+
+    // Check if current user is the owner of the request
+    const isOwner = user && request && (
+        user.token.userId.toString() === request.userId ||
+        `${user.token.name}@scu.edu` === request.userEmail
+    );
 
     const fetchRequest = async (id: string) => {
         try {
@@ -138,6 +249,12 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
 
         if (!request) return;
 
+        // Don't allow fulfilling your own request
+        if (isOwner) {
+            toast.error('You cannot fulfill your own request');
+            return;
+        }
+
         try {
             setFulfilling(true);
 
@@ -186,8 +303,13 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
                 setFulfilled(true);
                 toast.success(`Request fulfilled! Order placed for ${request.userEmail}`);
 
-                // Refresh the request data
-                await fetchRequest(request._id);
+                // Update the request with barcode if provided
+                if (response.data.barcode) {
+                    setRequest(prev => prev ? { ...prev, status: 'fulfilled', barcode: response.data.barcode } : null);
+                } else {
+                    // Refresh the request data
+                    await fetchRequest(request._id);
+                }
             } else {
                 toast.error('Failed to fulfill request. Please try again.');
             }
@@ -311,7 +433,9 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
                             <Link href="/menu" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium">
                                 ← Back to Menu
                             </Link>
-                            <h1 className="text-2xl font-bold text-gray-900 mt-1">Menu Item Request</h1>
+                            <h1 className="text-2xl font-bold text-gray-900 mt-1">
+                                {isOwner ? 'Your Request' : 'Menu Item Request'}
+                            </h1>
                         </div>
                         <button
                             onClick={() => setShowShareModal(true)}
@@ -335,7 +459,7 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
                                         📍 {request.locationName || (request.locationId && restaurantMapping[request.locationId]) || 'Any Location'}
                                     </span>
                                     <span>📅 {formatDate(request.createdAt)}</span>
-                                    <span>👤 Requested by: {request.userEmail}</span>
+                                    <span>👤 {isOwner ? 'Your request' : `Requested by: ${request.userEmail}`}</span>
                                 </div>
                             </div>
                             <div className="text-right">
@@ -354,81 +478,126 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
                         {request.status === 'fulfilled' && (
                             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
                                 <p className="text-blue-800 text-sm">
-                                    ✅ This request has been fulfilled! Someone has already ordered this item.
+                                    ✅ This request has been fulfilled! {isOwner ? 'Your order is ready!' : 'Someone has already ordered this item.'}
                                 </p>
                             </div>
                         )}
                     </div>
 
-                    {/* Fulfill Section */}
-                    <div className="p-6 border-b">
-                        <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                                <h3 className="text-lg font-semibold text-gray-900 mb-2">Help Out</h3>
-                                <p className="text-gray-600 text-sm mb-4">
-                                    {request.status === 'fulfilled'
-                                        ? 'This request has already been fulfilled.'
-                                        : `${request.userEmail} is looking for someone to order "${request.itemName}" for them.`
-                                    }
-                                </p>
-                            </div>
+                    {/* Barcode Section - Only show if owner and fulfilled with barcode */}
+                    {isOwner && request.status === 'fulfilled' && request.barcode && (
+                        <div className="p-6 border-b">
+                            <BarcodeDisplay barcode={request.barcode} itemName={request.itemName} />
                         </div>
+                    )}
 
-                        {request.status !== 'fulfilled' && (
-                            <div className="flex items-center space-x-4">
-                                <button
-                                    onClick={handleFulfillRequest}
-                                    disabled={fulfilling || !user || fulfilled}
-                                    className={`flex items-center space-x-2 px-6 py-3 rounded-md transition-colors font-medium ${user && !fulfilled
-                                        ? 'bg-green-600 text-white hover:bg-green-700'
-                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                        }`}
-                                >
-                                    <span>🎯</span>
-                                    <span>
-                                        {fulfilling
-                                            ? 'Fulfilling Request...'
-                                            : fulfilled
-                                                ? 'Request Fulfilled!'
-                                                : 'Fulfill This Request'
+                    {/* Fulfill Section - Only show if not owner */}
+                    {!isOwner && (
+                        <div className="p-6 border-b">
+                            <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Help Out</h3>
+                                    <p className="text-gray-600 text-sm mb-4">
+                                        {request.status === 'fulfilled'
+                                            ? 'This request has already been fulfilled.'
+                                            : `${request.userEmail} is looking for someone to order "${request.itemName}" for them.`
                                         }
-                                    </span>
-                                </button>
-
-                                {user && (
-                                    <div className="text-sm text-gray-600">
-                                        <p>This will place an order for <strong>{request.userEmail}</strong></p>
-                                        <p className="text-xs text-gray-500 mt-1">Youll be charged for this order</p>
-                                    </div>
-                                )}
+                                    </p>
+                                </div>
                             </div>
-                        )}
 
-                        {!user && request.status !== 'fulfilled' && (
-                            <div className="bg-gray-50 p-4 rounded-lg">
-                                <p className="text-gray-600 text-center">
-                                    <Link href="/login" className="text-indigo-600 hover:text-indigo-800 font-medium">
-                                        Log in
-                                    </Link> to fulfill this request and help out {request.userEmail}!
-                                </p>
-                            </div>
-                        )}
-                    </div>
+                            {request.status !== 'fulfilled' && (
+                                <div className="flex items-center space-x-4">
+                                    <button
+                                        onClick={handleFulfillRequest}
+                                        disabled={fulfilling || !user || fulfilled}
+                                        className={`flex items-center space-x-2 px-6 py-3 rounded-md transition-colors font-medium ${user && !fulfilled
+                                            ? 'bg-green-600 text-white hover:bg-green-700'
+                                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                            }`}
+                                    >
+                                        <span>🎯</span>
+                                        <span>
+                                            {fulfilling
+                                                ? 'Fulfilling Request...'
+                                                : fulfilled
+                                                    ? 'Request Fulfilled!'
+                                                    : 'Fulfill This Request'
+                                            }
+                                        </span>
+                                    </button>
+
+                                    {user && (
+                                        <div className="text-sm text-gray-600">
+                                            <p>This will place an order for <strong>{request.userEmail}</strong></p>
+                                            <p className="text-xs text-gray-500 mt-1">Youll be charged for this order</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {!user && request.status !== 'fulfilled' && (
+                                <div className="bg-gray-50 p-4 rounded-lg">
+                                    <p className="text-gray-600 text-center">
+                                        <Link href="/login" className="text-indigo-600 hover:text-indigo-800 font-medium">
+                                            Log in
+                                        </Link> to fulfill this request and help out {request.userEmail}!
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Owner-specific content */}
+                    {isOwner && (
+                        <div className="p-6 border-b">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Your Request Status</h3>
+                            {request.status === 'fulfilled' ? (
+                                <div className="bg-green-50 p-4 rounded-lg">
+                                    <p className="text-green-800 font-medium">🎉 Great news! Someone has fulfilled your request!</p>
+                                    <p className="text-green-700 text-sm mt-1">
+                                        {request.barcode ? 'Use the barcode above to pick up your order.' : 'Your order should be ready for pickup.'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="bg-blue-50 p-4 rounded-lg">
+                                    <p className="text-blue-800 font-medium">📋 Your request is still pending</p>
+                                    <p className="text-blue-700 text-sm mt-1">Share this link with friends to increase your chances of getting your item!</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Call to Action */}
                 <div className="mt-8 bg-green-50 rounded-lg p-6 text-center">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        {request.status === 'fulfilled' ? 'Request Completed!' : 'Help Someone Out!'}
-                    </h3>
-                    <p className="text-gray-600 mb-4">
-                        {request.status === 'fulfilled'
-                            ? `Someone has fulfilled this request for ${request.userEmail}. Thanks to everyone who helped!`
-                            : `${request.userEmail} is hoping someone can order "${request.itemName}" for them. Can you help?`
-                        }
-                    </p>
+                    {isOwner ? (
+                        <>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                {request.status === 'fulfilled' ? 'Request Completed!' : 'Waiting for Help'}
+                            </h3>
+                            <p className="text-gray-600 mb-4">
+                                {request.status === 'fulfilled'
+                                    ? `Someone has fulfilled your request for "${request.itemName}". Thanks to your helper!`
+                                    : `Share your request link to find someone who can order "${request.itemName}" for you.`
+                                }
+                            </p>
+                        </>
+                    ) : (
+                        <>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                {request.status === 'fulfilled' ? 'Request Completed!' : 'Help Someone Out!'}
+                            </h3>
+                            <p className="text-gray-600 mb-4">
+                                {request.status === 'fulfilled'
+                                    ? `Someone has fulfilled this request for ${request.userEmail}. Thanks to everyone who helped!`
+                                    : `${request.userEmail} is hoping someone can order "${request.itemName}" for them. Can you help?`
+                                }
+                            </p>
+                        </>
+                    )}
                     <div className="flex justify-center space-x-4">
-                        {request.status !== 'fulfilled' && (
+                        {!isOwner && request.status !== 'fulfilled' && (
                             <button
                                 onClick={handleFulfillRequest}
                                 disabled={!user || fulfilling || fulfilled}
@@ -511,7 +680,6 @@ export default function RequestPageClient({ requestId }: RequestPageClientProps)
                 </div>
             )}
 
-            <ToastContainer />
         </div>
     );
 }

@@ -64,8 +64,13 @@ const requestItemSchema = new mongoose.Schema({
     locationName: { type: String },
     description: { type: String, required: true },
     createdAt: { type: Date, default: Date.now },
-    status: { type: String, default: "pending" }, // pending, approved, rejected
+    status: { type: String, default: "pending" }, // pending, approved, rejected, fulfilled
     upvotes: { type: Number, default: 0 },
+    barcode: { type: String }, // Add barcode field
+    orderId: { type: String }, // Add order ID field
+    fulfilledBy: { type: String }, // User ID who fulfilled the request
+    fulfilledByEmail: { type: String }, // Email of user who fulfilled
+    fulfilledAt: { type: Date }, // When it was fulfilled
     comments: [
         {
             userId: String,
@@ -115,6 +120,15 @@ const authenticateUser = async (req: Request): Promise<any> => {
 // Helper to validate user email
 const validateUserEmail = (req: Request): boolean => {
     return !!(req.body.userEmail && req.body.userEmail.includes("@"));
+};
+
+// Helper to generate barcode from order ID
+const generateBarcode = (orderId: string): string => {
+    // Simple barcode generation - you can make this more sophisticated
+    // This creates a barcode-friendly string from the order ID
+    const timestamp = Date.now().toString().slice(-6);
+    const orderDigits = orderId.replace(/\D/g, "").slice(-4) || "0000";
+    return `SCU${orderDigits}${timestamp}`;
 };
 
 // Home route
@@ -274,6 +288,160 @@ app.post("/requestItem", async (req: Request, res: Response) => {
         } else {
             res.status(500).json({
                 error: "Failed to submit item request",
+                details: (error as Error).message,
+            });
+        }
+    }
+});
+
+// NEW: Fulfill request route
+app.post("/fulfillRequest", async (req: Request, res: Response) => {
+    try {
+        // Authenticate the fulfiller
+        const fulfiller = await authenticateUser(req);
+
+        const {
+            requestId,
+            requesterEmail,
+            fulfillerId,
+            fulfillerEmail,
+            cartItems,
+            locationId,
+            total,
+            specialRequest,
+        } = req.body;
+
+        if (!requestId) {
+            res.status(400).json({
+                error: "Missing required field: requestId",
+            });
+            return;
+        }
+
+        // Find the request to fulfill
+        const itemRequest = await RequestItem.findById(requestId);
+        if (!itemRequest) {
+            res.status(404).json({
+                error: "Request not found",
+            });
+            return;
+        }
+
+        // Check if request is already fulfilled
+        if (itemRequest.status === "fulfilled") {
+            res.status(400).json({
+                error: "Request has already been fulfilled",
+            });
+            return;
+        }
+
+        // Check if user is trying to fulfill their own request
+        if (itemRequest.userId === fulfiller.userId) {
+            res.status(400).json({
+                error: "You cannot fulfill your own request",
+            });
+            return;
+        }
+
+        // Create mobile order client for the fulfiller
+        let client = new MobileOrderClient(
+            {
+                baseApiUrl: "https://mobileorderprodapi.transactcampus.com",
+                baseIdpUrl: "https://login.scu.edu",
+                campusId: "4",
+                secretKey: "dFz9Dq435BT3xCVU2PCy",
+            },
+            {
+                userId: fulfiller.userId,
+                loginToken: fulfiller.loginToken,
+                sessionId: fulfiller.sessionId,
+            }
+        );
+
+        // For now, we'll create a simplified order since we don't have exact menu item details
+        // In a production system, you'd want to store more detailed item information in the request
+        const defaultCartItems = cartItems || [
+            {
+                itemid: 1, // This would need to be mapped from the actual menu
+                sectionid: 1,
+                upsell_upsellid: 0,
+                upsell_variantid: 0,
+                options: [],
+                meal_ex_applied: false,
+            },
+        ];
+
+        // Calculate the cart
+        const calculatedCart = await client.calculateCart(
+            defaultCartItems,
+            locationId || itemRequest.locationId || "13"
+        );
+
+        // Prepare order with special note about fulfilling request
+        const orderCart = {
+            ...calculatedCart.cartData,
+            grand_total: total || 500, // Default to $5.00 if no total provided
+            pickup_time_max: "12",
+            pickup_time_min: "10",
+            subtotal: total || 500,
+            checkout_select_choiceids: ["782"],
+            // Add special note that this is fulfilling a request
+            special_instructions: `Fulfilling request for ${requesterEmail}: ${
+                itemRequest.description
+            }${specialRequest ? ` | Additional notes: ${specialRequest}` : ""}`,
+        };
+
+        // Process the order
+        const orderId = await client.processOrder(orderCart);
+
+        if (!orderId) {
+            throw new Error("Failed to process order - no order ID returned");
+        }
+
+        // Generate barcode for the order
+        const barcode = generateBarcode(orderId);
+
+        // Update the request with fulfillment information
+        const updatedRequest = await RequestItem.findByIdAndUpdate(
+            requestId,
+            {
+                status: "fulfilled",
+                orderId: orderId,
+                barcode: barcode,
+                fulfilledBy: fulfiller.userId,
+                fulfilledByEmail: fulfiller.email || fulfillerEmail,
+                fulfilledAt: new Date(),
+            },
+            { new: true }
+        );
+
+        console.log(
+            `Request ${requestId} fulfilled by ${fulfiller.name} (${fulfiller.userId}) with order ${orderId}`
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "Request fulfilled successfully",
+            orderId: orderId,
+            barcode: barcode,
+            requestId: requestId,
+            fulfilledRequest: updatedRequest,
+        });
+    } catch (error) {
+        console.error("Error fulfilling request:", error);
+        if ((error as Error).message.includes("authentication")) {
+            res.status(401).json({
+                error: "Authentication failed",
+                details: (error as Error).message,
+            });
+        } else if ((error as Error).message.includes("order")) {
+            res.status(400).json({
+                error: "Failed to process order",
+                details: (error as Error).message,
+            });
+        } else {
+            res.status(500).json({
+                error: "Failed to fulfill request",
                 details: (error as Error).message,
             });
         }

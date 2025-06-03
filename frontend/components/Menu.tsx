@@ -331,17 +331,22 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
             );
 
             if (response.data.id) {
-                setOrderStatus({
-                    orderId: response.data.id,
-                    status: 'success',
-                    message: `Item request #${response.data.id} submitted successfully!`
-                });
+                // Instead of setting order status, redirect to the request page
+                const requestId = response.data.id;
+
+                // Close the modal first
+                setShowScheduleModal(false);
+                setCustomizingItem(null);
 
                 // Reset form
                 setRequestOptions({
                     isRequest: false,
                     message: ''
                 });
+
+                // Redirect to the request page
+                window.location.href = `/requests/${requestId}`;
+
             } else {
                 setOrderStatus({
                     orderId: '',

@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import axios from 'axios';
@@ -63,8 +64,9 @@ interface ItemRequest {
     locationName?: string;
     description: string;
     createdAt: string;
-    status: 'pending' | 'approved' | 'rejected';
+    status: 'pending' | 'approved' | 'rejected' | 'fulfilled';
     upvotes: number;
+    barcode?: string;
 }
 
 interface UserData {
@@ -288,6 +290,8 @@ const MyOrdersPage: React.FC = () => {
                 return 'bg-green-100 text-green-800';
             case 'rejected':
                 return 'bg-red-100 text-red-800';
+            case 'fulfilled':
+                return 'bg-blue-100 text-blue-800';
             default:
                 return 'bg-gray-100 text-gray-800';
         }
@@ -369,12 +373,20 @@ const MyOrdersPage: React.FC = () => {
                                 Welcome, {user.token.name} - View all your orders and requests
                             </p>
                         </div>
-                        <button
-                            onClick={handleLogout}
-                            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors text-sm"
-                        >
-                            Logout
-                        </button>
+                        <div className="flex space-x-3">
+                            <Link
+                                href="/menu"
+                                className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors text-sm"
+                            >
+                                Browse Menu
+                            </Link>
+                            <button
+                                onClick={handleLogout}
+                                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors text-sm"
+                            >
+                                Logout
+                            </button>
+                        </div>
                     </div>
 
                     {/* Debug Info - Remove in production */}
@@ -440,7 +452,11 @@ const MyOrdersPage: React.FC = () => {
                             </div>
                         ) : (
                             scheduledOrders.map((order) => (
-                                <div key={order._id} className="bg-white rounded-lg shadow-sm p-6">
+                                <Link
+                                    key={order._id}
+                                    href={`/scheduled/${order._id}`}
+                                    className="block bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer"
+                                >
                                     <div className="flex justify-between items-start mb-4">
                                         <div>
                                             <h3 className="text-lg font-semibold text-gray-900">
@@ -453,9 +469,12 @@ const MyOrdersPage: React.FC = () => {
                                                 Created: {formatDate(order.createdAt)}
                                             </p>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
-                                            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                                        </span>
+                                        <div className="flex items-center space-x-2">
+                                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
+                                                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                            </span>
+                                            <span className="text-gray-400">→</span>
+                                        </div>
                                     </div>
 
                                     <div className="border-t pt-4">
@@ -489,7 +508,7 @@ const MyOrdersPage: React.FC = () => {
                                             </div>
                                         )}
                                     </div>
-                                </div>
+                                </Link>
                             ))
                         )}
                     </div>
@@ -515,6 +534,9 @@ const MyOrdersPage: React.FC = () => {
                                             </h3>
                                             <p className="text-sm text-gray-600">
                                                 Ordered: {formatDate(order.date)}
+                                            </p>
+                                            <p className="text-sm text-gray-500">
+                                                Order ID: {order.id}
                                             </p>
                                         </div>
                                         <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
@@ -562,7 +584,11 @@ const MyOrdersPage: React.FC = () => {
                             </div>
                         ) : (
                             itemRequests.map((request) => (
-                                <div key={request._id} className="bg-white rounded-lg shadow-sm p-6">
+                                <Link
+                                    key={request._id}
+                                    href={`/requests/${request._id}`}
+                                    className="block bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer"
+                                >
                                     <div className="flex justify-between items-start mb-4">
                                         <div>
                                             <h3 className="text-lg font-semibold text-gray-900">{request.itemName}</h3>
@@ -574,19 +600,34 @@ const MyOrdersPage: React.FC = () => {
                                             </p>
                                         </div>
                                         <div className="text-right">
-                                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(request.status)}`}>
-                                                {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                                            </span>
+                                            <div className="flex items-center space-x-2">
+                                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(request.status)}`}>
+                                                    {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                                                </span>
+                                                <span className="text-gray-400">→</span>
+                                            </div>
                                             <p className="text-sm text-gray-600 mt-1">
                                                 {request.upvotes} upvote{request.upvotes !== 1 ? 's' : ''}
                                             </p>
+                                            {request.status === 'fulfilled' && request.barcode && (
+                                                <p className="text-xs text-green-600 mt-1">
+                                                    ✅ Ready for pickup
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
 
                                     <div className="border-t pt-4">
                                         <p className="text-gray-700">{request.description}</p>
+                                        {request.status === 'fulfilled' && (
+                                            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
+                                                <p className="text-sm text-green-800">
+                                                    🎉 Request fulfilled! Click to view your barcode.
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
+                                </Link>
                             ))
                         )}
                     </div>
