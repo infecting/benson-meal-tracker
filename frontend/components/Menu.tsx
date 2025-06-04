@@ -87,6 +87,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
     const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
     const [showScheduleModal, setShowScheduleModal] = useState<boolean>(false);
     const [user, setUser] = useState<UserData | null>(null);
+    const [userLoaded, setUserLoaded] = useState<boolean>(false); // Add this state
     const [pendingItem, setPendingItem] = useState<MenuItem | null>(null);
     const [retryCount, setRetryCount] = useState<number>(0);
     const [fetchFailed, setFetchFailed] = useState<boolean>(false);
@@ -109,17 +110,37 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
     const MAX_RETRIES = 3;
     const RETRY_DELAY = 3000;
 
+    // Load user data from localStorage on mount
+    useEffect(() => {
+        const savedUserData = localStorage.getItem('userData');
+        if (savedUserData) {
+            try {
+                setUser(JSON.parse(savedUserData));
+            } catch (e) {
+                console.error('Error parsing saved user data:', e);
+                localStorage.removeItem('userData');
+            }
+        }
+        setUserLoaded(true); // Mark user loading as complete
+    }, []);
+
     // Fetch menu items function
     const fetchMenuItems = useCallback(async () => {
         try {
             setIsLoading(true);
+
+            // Prepare request body with auth if user is available
+            const requestBody = user ? {
+                "userId": user.token.userId,
+                "sessionId": user.token.sessionId,
+                "loginToken": user.token.loginToken
+            } : {};
+
+            console.log('Fetching menu with auth:', user ? 'Yes' : 'No', requestBody);
+
             const response = await axios.post<MenuItem[]>(
                 `${process.env.NEXT_PUBLIC_REQUESTURL}/getMenu?l=${restaurantId}`,
-                {
-                    "userId": user?.token.userId,
-                    "sessionId": user?.token.sessionId,
-                    "loginToken": user?.token.loginToken
-                },
+                requestBody,
                 {
                     timeout: 10000,
                     headers: {
@@ -171,27 +192,16 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
                 }, RETRY_DELAY * (retryCount + 1));
             }
         }
-    }, [restaurantId, user, retryCount]);
+    }, [restaurantId, user, retryCount]); // Keep user in dependency array
 
+    // Only fetch menu after user data is loaded (whether user exists or not)
     useEffect(() => {
-        const savedUserData = localStorage.getItem('userData');
-        if (savedUserData) {
-            try {
-                setUser(JSON.parse(savedUserData));
-            } catch (e) {
-                console.error(e)
-                localStorage.removeItem('userData');
-            }
-        }
-    }, []);
-
-    useEffect(() => {
-        if (retryCount <= MAX_RETRIES) {
+        if (userLoaded && retryCount <= MAX_RETRIES) {
             fetchMenuItems();
-        } else {
+        } else if (userLoaded && retryCount > MAX_RETRIES) {
             setError('Failed to load menu after multiple attempts. Please reload the page or try again later.');
         }
-    }, [fetchMenuItems, retryCount]);
+    }, [fetchMenuItems, retryCount, userLoaded]); // Add userLoaded to dependencies
 
     const scheduleOrder = async (item: MenuItem, options?: SelectedOptions) => {
         if (!user) {
@@ -209,15 +219,37 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
             const optionsPrice = options ? Object.values(options).reduce((sum, option) => sum + option.price, 0) : 0;
             const totalPrice = basePrice + optionsPrice;
 
+            // Create proper cart item structure for mobile order API
+            const cartItem = {
+                itemid: item.id,
+                sectionid: item.sectionid,
+                upsell_upsellid: 0,
+                upsell_variantid: 0,
+                options: options ?
+                    Object.entries(options).map(([groupIndex, optionValue]) => ({
+                        optionid: optionValue.optId,
+                        values: [{
+                            valueid: optionValue.valueId,
+                            combo_itemid: 0,
+                            combo_items: [],
+                        }],
+                    })) :
+                    [],
+                meal_ex_applied: false,
+            };
+
             // Prepare items array for the scheduled order
             const items = [{
                 itemId: item.id.toString(),
                 name: item.name,
                 price: totalPrice,
                 quantity: 1,
+                cartItem: cartItem, // Store the full cart item structure
                 options: options ? Object.values(options).map(option => ({
                     name: option.name,
-                    value: option.name
+                    value: option.name,
+                    optId: option.optId,
+                    valueId: option.valueId
                 })) : []
             }];
 
@@ -228,9 +260,9 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
                 userId: user.token.userId,
                 sessionId: user.token.sessionId,
                 loginToken: user.token.loginToken,
-                userEmail: `${user.token.name}@scu.edu`, // Assuming SCU email format
+                userEmail: `${user.token.name}@scu.edu`,
                 locationId: restaurantId,
-                locationName: 'Restaurant', // You might want to pass this as a prop
+                locationName: 'Restaurant',
                 items: items,
                 scheduledTime: scheduledDateTime.toISOString(),
                 notes: specialRequest.hasRequest ? specialRequest.requestText : ''
@@ -309,15 +341,49 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
                 description += ` | Message: ${requestOptions.message}`;
             }
 
+            // Create proper cart item structure for mobile order API
+            const cartItem = {
+                itemid: item.id,
+                sectionid: item.sectionid,
+                upsell_upsellid: 0,
+                upsell_variantid: 0,
+                options: options ?
+                    Object.entries(options).map(([groupIndex, optionValue]) => ({
+                        optionid: optionValue.optId,
+                        values: [{
+                            valueid: optionValue.valueId,
+                            combo_itemid: 0,
+                            combo_items: [],
+                        }],
+                    })) :
+                    [],
+                meal_ex_applied: false,
+            };
+
             const requestData = {
                 userId: user.token.userId,
                 sessionId: user.token.sessionId,
                 loginToken: user.token.loginToken,
-                userEmail: `${user.token.name}@scu.edu`, // Assuming SCU email format
+                userEmail: `${user.token.name}@scu.edu`,
                 itemName: item.name,
                 description: description,
                 locationId: restaurantId,
-                locationName: 'Restaurant' // You might want to pass this as a prop
+                locationName: 'Restaurant',
+                // Store complete item information for fulfillment
+                itemDetails: {
+                    id: item.id,
+                    sectionid: item.sectionid,
+                    name: item.name,
+                    price: item.price,
+                    cartItem: cartItem
+                },
+                selectedOptions: options ? Object.values(options).map(option => ({
+                    name: option.name,
+                    value: option.name,
+                    optId: option.optId,
+                    valueId: option.valueId,
+                    price: option.price
+                })) : []
             };
 
             const response = await axios.post(

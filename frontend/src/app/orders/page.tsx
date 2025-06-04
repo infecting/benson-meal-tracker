@@ -1,11 +1,12 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import axios from 'axios';
+import QRCode from 'qrcode';
 
 // Restaurant mapping (same as your menu page)
 const restaurantMapping: Record<string, string> = {
@@ -55,6 +56,34 @@ interface PastOrder {
     status: string;
 }
 
+interface YourOrder {
+    _id: string;
+    userId: string;
+    userEmail: string;
+    orderId: string;
+    locationId: string;
+    locationName: string;
+    status: 'pending' | 'received' | 'preparing' | 'completed' | 'cancelled' | 'timeout' | 'error';
+    items: Array<{
+        itemId?: string;
+        name: string;
+        price: number;
+        quantity: number;
+        options?: Array<{ name: string; value: string }>;
+    }>;
+    orderTotal: number;
+    specialComment?: string;
+    barcode?: string;
+    completedAt?: string;
+    createdAt: string;
+    orderDetails?: {
+        calculatedCartData?: any;
+        pollAttempts?: number;
+        finalOrderStatus?: any;
+        barcodeSource?: 'api' | 'generated';
+    };
+}
+
 interface ItemRequest {
     _id: string;
     userId: string;
@@ -78,12 +107,60 @@ interface UserData {
     }
 }
 
+// QR Code component
+const QRCodeDisplay: React.FC<{ value: string; size?: number }> = ({
+    value,
+    size = 150
+}) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        if (canvasRef.current && value) {
+            QRCode.toCanvas(canvasRef.current, value, {
+                width: size,
+                margin: 2,
+                color: {
+                    dark: '#000000',
+                    light: '#FFFFFF'
+                }
+            }).catch((error) => {
+                console.error('Error generating QR code:', error);
+                // Fallback to simple text display if QR code generation fails
+                const canvas = canvasRef.current;
+                const ctx = canvas?.getContext('2d');
+                if (ctx && canvas) {
+                    canvas.width = size;
+                    canvas.height = size;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#000000';
+                    ctx.font = '12px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('QR Error', canvas.width / 2, canvas.height / 2 - 10);
+                    ctx.fillText(value.substring(0, 20), canvas.width / 2, canvas.height / 2 + 10);
+                }
+            });
+        }
+    }, [value, size]);
+
+    if (!value) {
+        return null;
+    }
+
+    return (
+        <div className="flex flex-col items-center">
+            <canvas ref={canvasRef} className="border border-gray-300 rounded" />
+        </div>
+    );
+};
+
 const MyOrdersPage: React.FC = () => {
     const [scheduledOrders, setScheduledOrders] = useState<ScheduledOrder[]>([]);
     const [pastOrders, setPastOrders] = useState<PastOrder[]>([]);
+    const [yourOrders, setYourOrders] = useState<YourOrder[]>([]);
     const [itemRequests, setItemRequests] = useState<ItemRequest[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'scheduled' | 'past' | 'requests'>('scheduled');
+    const [activeTab, setActiveTab] = useState<'yourOrders' | 'scheduled' | 'past' | 'requests'>('yourOrders');
     const [user, setUser] = useState<UserData | null>(null);
     const [debugInfo, setDebugInfo] = useState<string[]>([]);
 
@@ -118,6 +195,41 @@ const MyOrdersPage: React.FC = () => {
             addDebug('No userData found in localStorage');
         }
     }, []);
+
+    const fetchYourOrders = useCallback(async () => {
+        if (!user?.token) {
+            addDebug('Skipping your orders - no user token');
+            return;
+        }
+
+        try {
+            addDebug(`Fetching your orders for user: ${user.token.userId}`);
+            addDebug(`API URL: ${process.env.NEXT_PUBLIC_REQUESTURL}/yourOrders`);
+
+            const response = await axios.post(`${process.env.NEXT_PUBLIC_REQUESTURL}/yourOrders`, {
+                userId: user.token.userId,
+                loginToken: user.token.loginToken,
+                sessionId: user.token.sessionId
+            });
+
+            addDebug(`Your orders response: ${JSON.stringify(response.data)}`);
+            setYourOrders(response.data);
+        } catch (error) {
+            addDebug(`Error fetching your orders: ${error}`);
+            console.error('Error fetching your orders:', error);
+            if (axios.isAxiosError(error)) {
+                if (error.response?.status === 401) {
+                    toast.error('Authentication failed. Please log in again.');
+                    localStorage.removeItem('userData');
+                    setUser(null);
+                } else {
+                    toast.error(`Failed to fetch your orders: ${error.response?.status} ${error.message}`);
+                }
+            } else {
+                toast.error('Failed to fetch your orders');
+            }
+        }
+    }, [user]);
 
     const fetchScheduledOrders = useCallback(async () => {
         if (!user?.token) {
@@ -236,6 +348,7 @@ const MyOrdersPage: React.FC = () => {
 
         try {
             await Promise.all([
+                fetchYourOrders(),
                 fetchScheduledOrders(),
                 fetchPastOrders(),
                 fetchItemRequests()
@@ -249,7 +362,7 @@ const MyOrdersPage: React.FC = () => {
             setLoading(false);
             addDebug('Loading set to false');
         }
-    }, [fetchScheduledOrders, fetchPastOrders, fetchItemRequests]);
+    }, [fetchYourOrders, fetchScheduledOrders, fetchPastOrders, fetchItemRequests]);
 
     // Trigger fetch when user data is available
     useEffect(() => {
@@ -278,14 +391,22 @@ const MyOrdersPage: React.FC = () => {
         switch (status.toLowerCase()) {
             case 'scheduled':
                 return 'bg-blue-100 text-blue-800';
+            case 'pending':
+                return 'bg-yellow-100 text-yellow-800';
+            case 'received':
+                return 'bg-blue-100 text-blue-800';
+            case 'preparing':
+                return 'bg-orange-100 text-orange-800';
             case 'processing':
                 return 'bg-yellow-100 text-yellow-800';
             case 'completed':
                 return 'bg-green-100 text-green-800';
             case 'cancelled':
                 return 'bg-red-100 text-red-800';
-            case 'pending':
-                return 'bg-gray-100 text-gray-800';
+            case 'timeout':
+                return 'bg-red-100 text-red-800';
+            case 'error':
+                return 'bg-red-100 text-red-800';
             case 'approved':
                 return 'bg-green-100 text-green-800';
             case 'rejected':
@@ -410,6 +531,15 @@ const MyOrdersPage: React.FC = () => {
                     <div className="border-b border-gray-200">
                         <nav className="-mb-px flex space-x-8 px-6">
                             <button
+                                onClick={() => setActiveTab('yourOrders')}
+                                className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'yourOrders'
+                                    ? 'border-indigo-500 text-indigo-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    }`}
+                            >
+                                Your Orders ({yourOrders.length})
+                            </button>
+                            <button
                                 onClick={() => setActiveTab('scheduled')}
                                 className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'scheduled'
                                     ? 'border-indigo-500 text-indigo-600'
@@ -439,6 +569,106 @@ const MyOrdersPage: React.FC = () => {
                         </nav>
                     </div>
                 </div>
+
+                {/* Your Orders Tab */}
+                {activeTab === 'yourOrders' && (
+                    <div className="space-y-4">
+                        {yourOrders.length === 0 ? (
+                            <div className="bg-white rounded-lg p-8 text-center">
+                                <p className="text-gray-500">No active orders found</p>
+                                <p className="text-sm text-gray-400 mt-2">
+                                    Your real-time order tracking will appear here after placing an order!
+                                </p>
+                            </div>
+                        ) : (
+                            yourOrders.map((order) => (
+                                <div key={order._id} className="bg-white rounded-lg shadow-sm p-6">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-gray-900">
+                                                {order.locationName || restaurantMapping[order.locationId] || `Location ${order.locationId}`}
+                                            </h3>
+                                            <p className="text-sm text-gray-600">
+                                                Order ID: #{order.orderId}
+                                            </p>
+                                            <p className="text-sm text-gray-500">
+                                                Placed: {formatDate(order.createdAt)}
+                                            </p>
+                                            {order.completedAt && (
+                                                <p className="text-sm text-gray-500">
+                                                    Completed: {formatDate(order.completedAt)}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="text-right">
+                                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
+                                                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                            </span>
+                                            {order.orderDetails?.pollAttempts && (
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    Poll attempts: {order.orderDetails.pollAttempts}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="border-t pt-4">
+                                        <h4 className="font-medium text-gray-900 mb-2">Items:</h4>
+                                        <ul className="space-y-2">
+                                            {order.items.map((item, index) => (
+                                                <li key={index} className="flex justify-between items-center">
+                                                    <div>
+                                                        <span className="font-medium">{item.name}</span>
+                                                        {item.quantity > 1 && <span className="text-gray-600"> x{item.quantity}</span>}
+                                                        {item.options && item.options.length > 0 && (
+                                                            <div className="text-sm text-gray-500">
+                                                                {item.options.map(opt => `${opt.name}: ${opt.value}`).join(', ')}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <span className="font-medium">${(item.price / 100).toFixed(2)}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                        <div className="mt-4 pt-2 border-t flex justify-between items-center">
+                                            <span className="font-semibold">Total:</span>
+                                            <span className="font-semibold text-lg">
+                                                ${(order.orderTotal / 100).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        {order.specialComment && (
+                                            <div className="mt-2 p-2 bg-gray-50 rounded">
+                                                <span className="text-sm font-medium">Special Request: </span>
+                                                <span className="text-sm text-gray-700">{order.specialComment}</span>
+                                            </div>
+                                        )}
+                                        {order.barcode && (
+                                            <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <span className="text-sm font-medium text-green-800">Pickup QR Code:</span>
+                                                    <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
+                                                        Ready for Pickup
+                                                    </span>
+                                                </div>
+                                                <div className="bg-white p-3 rounded border flex justify-center">
+                                                    <QRCodeDisplay value={order.barcode} size={150} />
+                                                </div>
+                                                <div className="mt-2 text-center">
+                                                    <span className="text-xs text-gray-600 font-mono break-all">{order.barcode}</span>
+                                                </div>
+                                                <div className="mt-2 text-center">
+                                                    <span className="text-xs text-green-600">
+                                                        📱 Scan this QR code at pickup
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
 
                 {/* Scheduled Orders Tab */}
                 {activeTab === 'scheduled' && (
@@ -650,4 +880,4 @@ const MyOrdersPage: React.FC = () => {
     );
 };
 
-export default MyOrdersPage
+export default MyOrdersPage;

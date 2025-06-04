@@ -18,8 +18,11 @@ const restaurantMapping: Record<string, string> = {
     "1634": "Acai Bowl",
     "10": "Mission Bakery",
     "812": "The Chef's Table",
+    "8": "Global Grill",
+    "12": "Sunstream",
+    "1364": "Fresh Bytes",
+    "5": "Lucas (Cadence)",
 };
-
 // Mock types from the component
 interface MenuItem {
     id: number;

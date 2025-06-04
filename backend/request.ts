@@ -589,7 +589,7 @@ export class MobileOrderClient {
         }
     }
 
-    public async processOrder(calculatedCart: any): Promise<string> {
+    public async processOrder(calculatedCart: any): Promise<any> {
         try {
             const url = `${this.config.baseApiUrl}/api_user/processorderstaged`;
             const response = await this.api.post(url, calculatedCart, {
@@ -603,7 +603,7 @@ export class MobileOrderClient {
                 },
             });
 
-            const orderId = response.data.orderid || "";
+            const orderId = response.data.order_status_orderid || "";
             console.log(`Order processed successfully. Order ID: ${orderId}`);
             return orderId;
         } catch (error) {
@@ -615,8 +615,8 @@ export class MobileOrderClient {
     public async checkOrderStatus(orderId: string): Promise<any> {
         try {
             const statusData = {
-                orderid: orderId,
-                userid: this.state.userId,
+                orderid: orderId + "",
+                userid: this.state.userId + "",
                 campusid: this.config.campusId,
             };
 
