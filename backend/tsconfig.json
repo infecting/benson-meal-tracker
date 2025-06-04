@@ -12,6 +12,8 @@
     "types": ["jest", "node"]
   },
   "include": [
+    "*",
+    "*/*",
     "src/**/*",               // your src folder
     "index.ts",               // your entrypoint at project root
     "MobileOrderClient.test.ts"                // any other TS files at the root
