@@ -75,6 +75,7 @@ interface OrderStatus {
     orderId: string;
     status: string;
     message?: string;
+    barcode?: string;
 }
 
 const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) => {
@@ -87,7 +88,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
     const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
     const [showScheduleModal, setShowScheduleModal] = useState<boolean>(false);
     const [user, setUser] = useState<UserData | null>(null);
-    const [userLoaded, setUserLoaded] = useState<boolean>(false); // Add this state
+    const [userLoaded, setUserLoaded] = useState<boolean>(false);
     const [pendingItem, setPendingItem] = useState<MenuItem | null>(null);
     const [retryCount, setRetryCount] = useState<number>(0);
     const [fetchFailed, setFetchFailed] = useState<boolean>(false);
@@ -121,7 +122,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
                 localStorage.removeItem('userData');
             }
         }
-        setUserLoaded(true); // Mark user loading as complete
+        setUserLoaded(true);
     }, []);
 
     // Fetch menu items function
@@ -192,7 +193,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
                 }, RETRY_DELAY * (retryCount + 1));
             }
         }
-    }, [restaurantId, user, retryCount]); // Keep user in dependency array
+    }, [restaurantId, user, retryCount]);
 
     // Only fetch menu after user data is loaded (whether user exists or not)
     useEffect(() => {
@@ -201,7 +202,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
         } else if (userLoaded && retryCount > MAX_RETRIES) {
             setError('Failed to load menu after multiple attempts. Please reload the page or try again later.');
         }
-    }, [fetchMenuItems, retryCount, userLoaded]); // Add userLoaded to dependencies
+    }, [fetchMenuItems, retryCount, userLoaded]);
 
     const scheduleOrder = async (item: MenuItem, options?: SelectedOptions) => {
         if (!user) {
@@ -218,6 +219,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
             const basePrice = item.price;
             const optionsPrice = options ? Object.values(options).reduce((sum, option) => sum + option.price, 0) : 0;
             const totalPrice = basePrice + optionsPrice;
+            const totalPriceCents = Math.round(totalPrice * 100);
 
             // Create proper cart item structure for mobile order API
             const cartItem = {
@@ -244,7 +246,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
                 name: item.name,
                 price: totalPrice,
                 quantity: 1,
-                cartItem: cartItem, // Store the full cart item structure
+                cartItem: cartItem,
                 options: options ? Object.values(options).map(option => ({
                     name: option.name,
                     value: option.name,
@@ -264,6 +266,9 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
                 locationId: restaurantId,
                 locationName: 'Restaurant',
                 items: items,
+                cartItems: [cartItem], // Add cartItems for background processing
+                total: totalPriceCents, // Add total in cents
+                specialRequest: specialRequest.hasRequest ? specialRequest.requestText : '',
                 scheduledTime: scheduledDateTime.toISOString(),
                 notes: specialRequest.hasRequest ? specialRequest.requestText : ''
             };
@@ -281,8 +286,8 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
             if (response.data.id) {
                 setOrderStatus({
                     orderId: response.data.id,
-                    status: 'success',
-                    message: `Order scheduled for ${scheduleOptions.date} at ${scheduleOptions.time}!`
+                    status: 'scheduled',
+                    message: `Order scheduled for ${scheduleOptions.date} at ${scheduleOptions.time}! It will be automatically processed at the scheduled time.`
                 });
 
                 // Reset form
@@ -450,6 +455,11 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
         setError('');
 
         try {
+            // Calculate total price including options
+            const basePrice = item.price;
+            const optionsPrice = options ? Object.values(options).reduce((sum, option) => sum + option.price, 0) : 0;
+            const totalPrice = basePrice + optionsPrice;
+
             const cartItems = [
                 {
                     itemid: item.id,
@@ -470,7 +480,7 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
                 },
             ];
 
-            const priceInCents = Math.round(item.price * 100);
+            const priceInCents = Math.round(totalPrice * 100);
 
             const orderData: any = {
                 userId: user.token.userId,
@@ -485,24 +495,25 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
                 orderData.specialRequest = specialRequest.requestText.trim();
             }
 
+            // The server now handles all polling and returns the final result
             const response = await axios.post(
                 `${process.env.NEXT_PUBLIC_REQUESTURL}/order`,
                 orderData,
                 {
                     headers: {
                         'Content-Type': 'application/json'
-                    }
+                    },
+                    timeout: 300000 // 5 minute timeout since server handles polling
                 }
             );
 
             if (response.data.orderId) {
                 setOrderStatus({
                     orderId: response.data.orderId,
-                    status: 'success',
-                    message: `Order #${response.data.orderId} placed successfully!`
+                    status: response.data.status || 'completed',
+                    message: response.data.message || `Order #${response.data.orderId} completed successfully!`,
+                    barcode: response.data.barcode
                 });
-
-                checkOrderStatus(response.data.orderId);
 
                 setSpecialRequest({
                     hasRequest: false,
@@ -517,52 +528,28 @@ const RestaurantMenu: React.FC<MenuProps> = ({ restaurantId, onRequestItem }) =>
             }
         } catch (err) {
             console.error('Error placing order:', err);
+
+            let errorMessage = 'Error placing order. Please try again later.';
+
+            if (axios.isAxiosError(err)) {
+                if (err.code === 'ECONNABORTED') {
+                    errorMessage = 'Order took too long to process. Please check your order history or try again.';
+                } else if (err.response) {
+                    errorMessage = `Order failed: ${err.response.data.error || err.response.data.details || 'Unknown error'}`;
+                } else {
+                    errorMessage = 'Failed to place order. Network error or server unavailable.';
+                }
+            }
+
             setOrderStatus({
                 orderId: '',
                 status: 'error',
-                message: 'Error placing order. Please try again later.'
+                message: errorMessage
             });
 
-            if (axios.isAxiosError(err) && err.response) {
-                setError(`Order failed: ${err.response.data.error || 'Unknown error'}`);
-            } else {
-                setError('Failed to place order. Network error or server unavailable.');
-            }
+            setError(errorMessage);
         } finally {
             setIsOrdering(false);
-        }
-    };
-
-    const checkOrderStatus = async (orderId: string) => {
-        if (!user) return;
-
-        try {
-            const response = await axios.post(
-                `${process.env.NEXT_PUBLIC_REQUESTURL}/orderStatus`,
-                {
-                    userId: user.token.userId,
-                    sessionId: user.token.sessionId,
-                    loginToken: user.token.loginToken,
-                    orderId: orderId
-                },
-                {
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
-
-            setOrderStatus(prev => ({
-                ...prev!,
-                status: response.data.status || 'pending',
-                message: `Order #${orderId}: ${response.data.status || 'Status pending'}`
-            }));
-
-            if (response.data.status !== 'completed' && response.data.status !== 'cancelled') {
-                setTimeout(() => checkOrderStatus(orderId), 5000);
-            }
-        } catch (err) {
-            console.error('Error checking order status:', err);
         }
     };
 
