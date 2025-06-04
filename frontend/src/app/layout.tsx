@@ -17,8 +17,8 @@ export default function RootLayout({
       <body className="bg-gray-100 min-h-screen">
         <div className="flex">
           <Navbar />
-          {/* Main content with left padding to account for the fixed navbar */}
-          <main className="flex-1 ml-64 p-6">
+          {/* Main content with responsive padding */}
+          <main className="flex-1 lg:ml-64 pt-16 lg:pt-6 p-6">
             {children}
           </main>
         </div>

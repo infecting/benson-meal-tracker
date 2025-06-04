@@ -1,15 +1,14 @@
 "use client";
-
-import { CalendarCheck, LogOut, ShoppingCart, TrendingUp, Utensils } from "lucide-react";
+import { CalendarCheck, LogOut, Menu, ShoppingCart, TrendingUp, Utensils, X } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation"; // Use next/navigation in app router
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export const Navbar = ({ currentPath = "/" }) => {
-    // Use the currentPath prop passed from the layout
     const pathname = currentPath;
     const router = useRouter();
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const navItems = [
         { name: 'Order', path: '/menu', icon: <CalendarCheck size={20} /> },
@@ -24,22 +23,15 @@ export const Navbar = ({ currentPath = "/" }) => {
     const handleLogout = async (e) => {
         e.preventDefault();
         setIsLoggingOut(true);
-
         try {
-            // Clear localStorage userData
             localStorage.removeItem('userData');
-
-            // Make request to logout endpoint
             await fetch('http://localhost:3000/logout', {
                 method: 'GET',
-                credentials: 'include', // Important for sending cookies if using sessions
+                credentials: 'include',
             });
-
-            // Redirect to login page or home page after logout
             router.push('/login');
         } catch (error) {
             console.error('Logout error:', error);
-            // Even if the server request fails, still clear local data
             localStorage.removeItem('userData');
             router.push('/login');
         } finally {
@@ -47,36 +39,99 @@ export const Navbar = ({ currentPath = "/" }) => {
         }
     };
 
-    return (
-        <nav className="bg-gray-800 text-white w-64 min-h-screen p-4 space-y-2 fixed top-0 left-0">
-            <div className="text-2xl font-bold mb-8 flex items-center space-x-2">
-                <Utensils size={28} className="text-indigo-400" />
-                <span>
-                    Benson Bites
-                </span>
-            </div>
-            {navItems.map((item) => (
-                <Link
-                    href={item.path}
-                    key={item.name}
-                    className={`w-full flex items-center space-x-3 p-3 rounded-lg text-left hover:bg-gray-700 transition-colors ${isActive(item.path) ? 'bg-indigo-600 text-white' : 'text-gray-300'
-                        }`}
-                >
-                    {item.icon}
-                    <span>{item.name}</span>
-                </Link>
-            ))}
-            <div className="absolute bottom-4 left-4 right-4 space-y-2">
+    const closeMobileMenu = () => {
+        setIsMobileMenuOpen(false);
+    };
 
+    return (
+        <>
+            {/* Mobile Header */}
+            <div className="lg:hidden bg-gray-800 text-white p-4 flex items-center justify-between fixed top-0 left-0 right-0 z-50">
+                <div className="flex items-center space-x-2">
+                    <Utensils size={24} className="text-indigo-400" />
+                    <span className="text-xl font-bold">Benson Bites</span>
+                </div>
                 <button
-                    onClick={handleLogout}
-                    disabled={isLoggingOut}
-                    className="w-full flex items-center space-x-3 p-3 rounded-lg text-left text-gray-300 hover:bg-gray-700 transition-colors"
+                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    className="p-2 hover:bg-gray-700 rounded"
                 >
-                    <LogOut size={20} />
-                    <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+                    {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
                 </button>
             </div>
-        </nav>
+
+            {/* Mobile Menu Overlay */}
+            {isMobileMenuOpen && (
+                <div className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40" onClick={closeMobileMenu} />
+            )}
+
+            {/* Mobile Menu */}
+            <div className={`lg:hidden fixed top-0 left-0 h-full w-64 bg-gray-800 text-white transform transition-transform duration-300 ease-in-out z-50 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}>
+                <div className="p-4 space-y-2">
+                    <div className="text-2xl font-bold mb-8 flex items-center space-x-2">
+                        <Utensils size={28} className="text-indigo-400" />
+                        <span>Benson Bites</span>
+                    </div>
+
+                    {navItems.map((item) => (
+                        <Link
+                            href={item.path}
+                            key={item.name}
+                            onClick={closeMobileMenu}
+                            className={`w-full flex items-center space-x-3 p-3 rounded-lg text-left hover:bg-gray-700 transition-colors ${isActive(item.path) ? 'bg-indigo-600 text-white' : 'text-gray-300'
+                                }`}
+                        >
+                            {item.icon}
+                            <span>{item.name}</span>
+                        </Link>
+                    ))}
+
+                    <div className="absolute bottom-4 left-4 right-4">
+                        <button
+                            onClick={(e) => {
+                                handleLogout(e);
+                                closeMobileMenu();
+                            }}
+                            disabled={isLoggingOut}
+                            className="w-full flex items-center space-x-3 p-3 rounded-lg text-left text-gray-300 hover:bg-gray-700 transition-colors"
+                        >
+                            <LogOut size={20} />
+                            <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Desktop Sidebar */}
+            <nav className="hidden lg:block bg-gray-800 text-white w-64 min-h-screen p-4 space-y-2 fixed top-0 left-0">
+                <div className="text-2xl font-bold mb-8 flex items-center space-x-2">
+                    <Utensils size={28} className="text-indigo-400" />
+                    <span>Benson Bites</span>
+                </div>
+
+                {navItems.map((item) => (
+                    <Link
+                        href={item.path}
+                        key={item.name}
+                        className={`w-full flex items-center space-x-3 p-3 rounded-lg text-left hover:bg-gray-700 transition-colors ${isActive(item.path) ? 'bg-indigo-600 text-white' : 'text-gray-300'
+                            }`}
+                    >
+                        {item.icon}
+                        <span>{item.name}</span>
+                    </Link>
+                ))}
+
+                <div className="absolute bottom-4 left-4 right-4 space-y-2">
+                    <button
+                        onClick={handleLogout}
+                        disabled={isLoggingOut}
+                        className="w-full flex items-center space-x-3 p-3 rounded-lg text-left text-gray-300 hover:bg-gray-700 transition-colors"
+                    >
+                        <LogOut size={20} />
+                        <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+                    </button>
+                </div>
+            </nav>
+        </>
     );
 };
