@@ -117,7 +117,7 @@ const LoginPage: React.FC = () => {
                             <button
                                 onClick={() => {
                                     // Navigate to main app - replace with your navigation logic
-                                    window.location.href = '/';
+                                    window.location.href = '/wrapped';
                                 }}
                                  className="w-full py-3 px-4 rounded-lg font-medium bg-[#A32035] hover:bg-red-700 text-white transition-colors"
                             >
