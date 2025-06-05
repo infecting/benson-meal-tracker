@@ -12,28 +12,34 @@ const faqs = [
   {
     question: "How do I place an order?",
     answer:
-      "Once you log in with your SCU credentials, browse available locations, customize your items in the menu, and click submit.",
+      "Once you log in with your SCU credentials, browse available locations, customize your items in the menu, and click order item.",
   },
   {
     question: "What is wrapped?",
     answer:
-      "Yes, as long as the vendor hasn’t started preparing your food. Go to “My Orders” and click the edit or cancel button next to your pending order if it's still within the editable window.",
+      "Similar to Spotify Wrapped, Benson Bites Wrapped is a personalized summary of your dining habits at Benson. It shows you how many meals you’ve ordered, your most popular items/locations, and more.",
   },
   {
-    question: "Is there a schedule option?",
+    question: "Can I schedule orders in advance?",
     answer:
-      "...",
+      "Yes! You can schedule orders for pickup at a later time. Just select the date and time when placing your order.",
   },
   {
-    question: "Can I come up with more filler text?",
+    question: "How does the request feature work?",
     answer:
-      "Yes. All payments go through encrypted third-party processors. Benson Bites does not store your payment information on our servers.",
+      "When you are purchasing an item, you can select to generate a request link. This will let you share the order with someone who may still have points remaining, allowing them to pay for the item. This is useful for making the most of your points before they expire at the end of the semester.",
   },
   {
-    question: "Question question question question question?",
+    question: "Where can I see my Benson Bites order history?",
     answer:
-      "Use the “Report Issue” button in the footer, or email us directly at support@bensonbites.scu.edu. We’ll do our best to address bugs quickly!",
+      "Within My Orders, you can view all of your past orders. This includes the date, time, and items ordered. You can also find the QR codes for each order, which can be scanned at Benson for pickup.",
   },
+  {
+    question: "Why did my order fail?",
+    answer:
+      "Double check that you have enough funds within your account to make a purchase, and that the item you are trying to order is available at the time you are ordering it.",
+  },
+  
 ];
 
 export default function FAQPage() {
