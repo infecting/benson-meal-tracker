@@ -119,7 +119,7 @@ const LoginPage: React.FC = () => {
                                     // Navigate to main app - replace with your navigation logic
                                     window.location.href = '/';
                                 }}
-                                className="w-full py-3 px-4 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                                 className="w-full py-3 px-4 rounded-lg font-medium bg-[#A32035] hover:bg-red-700 text-white transition-colors"
                             >
                                 Continue to App
                             </button>
