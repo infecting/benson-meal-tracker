@@ -258,7 +258,7 @@ const WrappedPage: React.FC = () => {
             </div>
 
             {/* Key Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-6 max-w-4xl mx-auto">
                 {/* Total Spent Card */}
                 <div className={`animate-fadeIn ${animationComplete ? 'delay-0' : 'opacity-0'}`}>
                     <div className="bg-white p-6 rounded-xl shadow-lg h-full">
@@ -282,19 +282,8 @@ const WrappedPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Weekly Spend Card */}
-                <div className={`animate-fadeIn ${animationComplete ? 'delay-300' : 'opacity-0'}`}>
-                    <div className="bg-white p-6 rounded-xl shadow-lg h-full">
-                        <h3 className="text-xl font-semibold text-gray-800 mb-2">Order Frequency</h3>
-                        <p className="text-2xl font-bold text-blue-600">
-                            {wrappedData.orderFrequency?.toFixed(1) || 0}
-                        </p>
-                        <p className="text-gray-500 text-sm mt-2">orders per week</p>
-                    </div>
-                </div>
-
                 {/* Favorite Place Card */}
-                <div className={`animate-fadeIn ${animationComplete ? 'delay-450' : 'opacity-0'}`}>
+                <div className={`animate-fadeIn ${animationComplete ? 'delay-300' : 'opacity-0'}`}>
                     <div className="bg-white p-6 rounded-xl shadow-lg h-full">
                         <h3 className="text-xl font-semibold text-gray-800 mb-2">Favorite Place</h3>
                         <p className="text-2xl font-bold text-pink-600">{wrappedData.place}</p>
@@ -303,7 +292,7 @@ const WrappedPage: React.FC = () => {
                 </div>
 
                 {/* Most Ordered Item Card */}
-                <div className={`animate-fadeIn ${animationComplete ? 'delay-600' : 'opacity-0'}`}>
+                <div className={`animate-fadeIn ${animationComplete ? 'delay-450' : 'opacity-0'}`}>
                     <div className="bg-white p-6 rounded-xl shadow-lg h-full">
                         <h3 className="text-xl font-semibold text-gray-800 mb-2">Top Order</h3>
                         <p className="text-2xl font-bold text-red-600">{wrappedData.order}</p>
@@ -312,7 +301,7 @@ const WrappedPage: React.FC = () => {
                 </div>
 
                 {/* Unique Items Card */}
-                <div className={`animate-fadeIn ${animationComplete ? 'delay-750' : 'opacity-0'}`}>
+                <div className={`animate-fadeIn ${animationComplete ? 'delay-600' : 'opacity-0'}`}>
                     <div className="bg-white p-6 rounded-xl shadow-lg h-full">
                         <h3 className="text-xl font-semibold text-gray-800 mb-2">Unique Items</h3>
                         <p className="text-2xl font-bold text-yellow-600">
@@ -348,9 +337,6 @@ const WrappedPage: React.FC = () => {
                 }
                 .delay-600 {
                     animation-delay: 0.6s;
-                }
-                .delay-750 {
-                    animation-delay: 0.75s;
                 }
                 @keyframes fadeIn {
                     from { opacity: 0; transform: translateY(20px); }
