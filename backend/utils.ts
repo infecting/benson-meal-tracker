@@ -282,7 +282,8 @@ export function getWeeklySpend(pastOrders: any): number {
         (1000 * 60 * 60 * 24);
 
     const totalSpent = moneySpent(pastOrders);
+    // Calculate weekly spend by multiplying the daily average by 7
     return timeSpanDays > 0
-        ? (totalSpent / (timeSpanDays / 7))
+        ? (totalSpent / timeSpanDays) * 7
         : totalSpent;
 }
