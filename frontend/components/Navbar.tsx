@@ -1,5 +1,5 @@
 "use client";
-import { CalendarCheck, LogOut, Menu, ShoppingCart, TrendingUp, Utensils, X } from "lucide-react";
+import { CalendarCheck, FileQuestion, FileQuestionIcon, LogOut, Menu, ShoppingCart, TrendingUp, Utensils, X, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -9,11 +9,14 @@ export const Navbar = ({ currentPath = "/" }) => {
     const router = useRouter();
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useState(false); // Track collapsed state for desktop sidebar
+
 
 const navItems = [
     { name: 'Dining Wrapped', path: '/wrapped', icon: <TrendingUp size={20} /> },
     { name: 'Order', path: '/menu', icon: <CalendarCheck size={20} /> },
     { name: 'My Orders', path: '/orders', icon: <ShoppingCart size={20} /> },
+    //{ name: 'FAQ', path: '/faq', icon: <FileQuestion size={20} /> },
 ];
 
     const isActive = (path) => {
@@ -37,6 +40,10 @@ const navItems = [
         } finally {
             setIsLoggingOut(false);
         }
+    };
+
+    const toggleCollapse = () => {
+      setIsCollapsed((prev) => !prev);
     };
 
     const closeMobileMenu = () => {
@@ -103,32 +110,41 @@ const navItems = [
             </div>
 
             {/* Desktop Sidebar */}
-            <nav className="hidden lg:block bg-[#A32035] text-white w-64 min-h-screen p-4 space-y-2 fixed top-0 left-0">
-                <div className="text-2xl font-bold mb-8 flex items-center space-x-2">
-                    <Utensils size={28} className="text-white-400" />
-                    <span>Benson Bites</span>
+            <nav className={`hidden lg:block bg-[#A32035] text-white ${isCollapsed ? "w-20" : "w-64"} min-h-screen p-4 space-y-2 fixed top-0 left-0 transition-[width] duration-100`}>
+                <div className={`text-2xl font-bold mb-8 flex items-center ${isCollapsed ? "justify-center" : "space-x-2 justify-between"}`}>
+                    <div className="flex items-center space-x-2">
+                        <Utensils size={28} className="text-white-400" />
+                        {!isCollapsed && <span>Benson Bites</span>}
+                    </div>
+                    {/* Collapse/Expand button */}
+                    <button
+                        onClick={toggleCollapse}
+                        className="p-1 hover:bg-red-900 rounded transition-colors"
+                        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                    >
+                        {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+                    </button>
                 </div>
 
                 {navItems.map((item) => (
                     <Link
                         href={item.path}
                         key={item.name}
-                        className={`w-full flex items-center space-x-3 p-3 rounded-lg text-left hover:bg-red-900 transition-colors ${isActive(item.path) ? 'bg-indigo-600 text-white' : 'text-gray-300'
-                            }`}
+                        className={`w-full flex items-center ${isCollapsed ? "justify-center" : "space-x-3"} p-3 rounded-lg text-left hover:bg-red-900 transition-colors ${isActive(item.path) ? 'bg-indigo-600 text-white' : 'text-gray-300'}`}
                     >
                         {item.icon}
-                        <span>{item.name}</span>
+                        {!isCollapsed && <span>{item.name}</span>}
                     </Link>
                 ))}
 
-                <div className="absolute bottom-4 left-4 right-4 space-y-2">
+                <div className={`absolute bottom-4 left-4 right-4 ${isCollapsed ? "flex justify-center" : ""} space-y-2`}>
                     <button
                         onClick={handleLogout}
                         disabled={isLoggingOut}
-                        className="w-full flex items-center space-x-3 p-3 rounded-lg text-left text-gray-300 hover:bg-red-900 transition-colors"
+                        className={`w-full flex items-center ${isCollapsed ? "justify-center" : "space-x-3"} p-3 rounded-lg text-left text-gray-300 hover:bg-red-900 transition-colors`}
                     >
                         <LogOut size={20} />
-                        <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+                        {!isCollapsed && <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>}
                     </button>
                 </div>
             </nav>
