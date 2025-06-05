@@ -299,9 +299,11 @@ const WrappedPage: React.FC = () => {
                         <p className="text-gray-500 text-sm mt-2">your most ordered item</p>
                     </div>
                 </div>
+            </div>
 
-                {/* Unique Items Card */}
-                <div className={`animate-fadeIn ${animationComplete ? 'delay-600' : 'opacity-0'}`}>
+            {/* Unique Items Card - Centered */}
+            <div className="flex justify-center mt-6">
+                <div className={`animate-fadeIn ${animationComplete ? 'delay-600' : 'opacity-0'} w-full sm:w-1/2`}>
                     <div className="bg-white p-6 rounded-xl shadow-lg h-full">
                         <h3 className="text-xl font-semibold text-gray-800 mb-2">Unique Items</h3>
                         <p className="text-2xl font-bold text-yellow-600">
