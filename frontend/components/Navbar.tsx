@@ -1,5 +1,5 @@
 "use client";
-import { CalendarCheck, FileQuestion, FileQuestionIcon, LogOut, Menu, ShoppingCart, TrendingUp, Utensils, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarCheck, LogOut, Menu, ShoppingCart, TrendingUp, Utensils, X, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -12,12 +12,12 @@ export const Navbar = ({ currentPath = "/" }) => {
     const [isCollapsed, setIsCollapsed] = useState(false); // Track collapsed state for desktop sidebar
 
 
-const navItems = [
-    { name: 'Dining Wrapped', path: '/wrapped', icon: <TrendingUp size={20} /> },
-    { name: 'Order', path: '/menu', icon: <CalendarCheck size={20} /> },
-    { name: 'My Orders', path: '/orders', icon: <ShoppingCart size={20} /> },
-    //{ name: 'FAQ', path: '/faq', icon: <FileQuestion size={20} /> },
-];
+    const navItems = [
+        { name: 'Dining Wrapped', path: '/wrapped', icon: <TrendingUp size={20} /> },
+        { name: 'Order', path: '/menu', icon: <CalendarCheck size={20} /> },
+        { name: 'My Orders', path: '/orders', icon: <ShoppingCart size={20} /> },
+        //{ name: 'FAQ', path: '/faq', icon: <FileQuestion size={20} /> },
+    ];
 
     const isActive = (path) => {
         return pathname === path || pathname?.startsWith(`${path}/`);
@@ -43,7 +43,7 @@ const navItems = [
     };
 
     const toggleCollapse = () => {
-      setIsCollapsed((prev) => !prev);
+        setIsCollapsed((prev) => !prev);
     };
 
     const closeMobileMenu = () => {
