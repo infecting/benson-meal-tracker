@@ -197,8 +197,8 @@ const LoginPage: React.FC = () => {
                             onClick={handleLogin}
                             disabled={isLoading}
                             className={`w-full py-3 px-4 rounded-lg font-medium ${isLoading
-                                ? 'bg-blue-400 cursor-not-allowed'
-                                : 'bg-blue-600 hover:bg-blue-700'
+                                ? 'bg-[#A32035] cursor-not-allowed'
+                                : 'bg-[#A32035] hover:bg-[#A32035]'
                                 } text-white transition-colors`}
                         >
                             {isLoading ? (

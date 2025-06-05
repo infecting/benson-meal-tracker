@@ -46,14 +46,14 @@ export const Navbar = ({ currentPath = "/" }) => {
     return (
         <>
             {/* Mobile Header */}
-            <div className="lg:hidden bg-gray-800 text-white p-4 flex items-center justify-between fixed top-0 left-0 right-0 z-50">
+            <div className="lg:hidden bg-[#A32035] text-white p-4 flex items-center justify-between fixed top-0 left-0 right-0 z-50">
                 <div className="flex items-center space-x-2">
-                    <Utensils size={24} className="text-indigo-400" />
+                    <Utensils size={24} className="text-white-400" />
                     <span className="text-xl font-bold">Benson Bites</span>
                 </div>
                 <button
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    className="p-2 hover:bg-gray-700 rounded"
+                    className="p-2 hover:bg-red-900 rounded"
                 >
                     {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
                 </button>
@@ -65,11 +65,11 @@ export const Navbar = ({ currentPath = "/" }) => {
             )}
 
             {/* Mobile Menu */}
-            <div className={`lg:hidden fixed top-0 left-0 h-full w-64 bg-gray-800 text-white transform transition-transform duration-300 ease-in-out z-50 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+            <div className={`lg:hidden fixed top-0 left-0 h-full w-64 bg-[#A32035] text-white transform transition-transform duration-300 ease-in-out z-50 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
                 }`}>
                 <div className="p-4 space-y-2">
                     <div className="text-2xl font-bold mb-8 flex items-center space-x-2">
-                        <Utensils size={28} className="text-indigo-400" />
+                        <Utensils size={28} className="text-white-400" />
                         <span>Benson Bites</span>
                     </div>
 
@@ -78,7 +78,7 @@ export const Navbar = ({ currentPath = "/" }) => {
                             href={item.path}
                             key={item.name}
                             onClick={closeMobileMenu}
-                            className={`w-full flex items-center space-x-3 p-3 rounded-lg text-left hover:bg-gray-700 transition-colors ${isActive(item.path) ? 'bg-indigo-600 text-white' : 'text-gray-300'
+                            className={`w-full flex items-center space-x-3 p-3 rounded-lg text-left hover:bg-red-900 transition-colors ${isActive(item.path) ? 'bg-white-600 text-white' : 'text-gray-300'
                                 }`}
                         >
                             {item.icon}
@@ -93,7 +93,7 @@ export const Navbar = ({ currentPath = "/" }) => {
                                 closeMobileMenu();
                             }}
                             disabled={isLoggingOut}
-                            className="w-full flex items-center space-x-3 p-3 rounded-lg text-left text-gray-300 hover:bg-gray-700 transition-colors"
+                            className="w-full flex items-center space-x-3 p-3 rounded-lg text-left text-gray-300 hover:bg-red-900 transition-colors"
                         >
                             <LogOut size={20} />
                             <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
@@ -103,9 +103,9 @@ export const Navbar = ({ currentPath = "/" }) => {
             </div>
 
             {/* Desktop Sidebar */}
-            <nav className="hidden lg:block bg-gray-800 text-white w-64 min-h-screen p-4 space-y-2 fixed top-0 left-0">
+            <nav className="hidden lg:block bg-[#A32035] text-white w-64 min-h-screen p-4 space-y-2 fixed top-0 left-0">
                 <div className="text-2xl font-bold mb-8 flex items-center space-x-2">
-                    <Utensils size={28} className="text-indigo-400" />
+                    <Utensils size={28} className="text-white-400" />
                     <span>Benson Bites</span>
                 </div>
 
@@ -113,7 +113,7 @@ export const Navbar = ({ currentPath = "/" }) => {
                     <Link
                         href={item.path}
                         key={item.name}
-                        className={`w-full flex items-center space-x-3 p-3 rounded-lg text-left hover:bg-gray-700 transition-colors ${isActive(item.path) ? 'bg-indigo-600 text-white' : 'text-gray-300'
+                        className={`w-full flex items-center space-x-3 p-3 rounded-lg text-left hover:bg-red-900 transition-colors ${isActive(item.path) ? 'bg-indigo-600 text-white' : 'text-gray-300'
                             }`}
                     >
                         {item.icon}
@@ -125,7 +125,7 @@ export const Navbar = ({ currentPath = "/" }) => {
                     <button
                         onClick={handleLogout}
                         disabled={isLoggingOut}
-                        className="w-full flex items-center space-x-3 p-3 rounded-lg text-left text-gray-300 hover:bg-gray-700 transition-colors"
+                        className="w-full flex items-center space-x-3 p-3 rounded-lg text-left text-gray-300 hover:bg-red-900 transition-colors"
                     >
                         <LogOut size={20} />
                         <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>

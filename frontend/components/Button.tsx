@@ -7,7 +7,7 @@ export const Button: React.FC<ButtonProps> = ({ children, variant = 'primary', s
     const baseStyles = "font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2";
 
     const variantStyles = {
-        primary: "bg-indigo-600 hover:bg-indigo-700 text-white focus:ring-indigo-500",
+        primary: "bg-[#A32035] hover:bg-red-700 text-white focus:ring-red-700",
         secondary: "bg-gray-200 hover:bg-gray-300 text-gray-800 focus:ring-gray-400",
         danger: "bg-red-500 hover:bg-red-600 text-white focus:ring-red-400",
     };

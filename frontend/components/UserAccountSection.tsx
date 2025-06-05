@@ -40,7 +40,7 @@ const UserAccountSection: React.FC<UserAccountSectionProps> = ({
             ) : (
                 <button
                     onClick={onLoginClick}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+                    className="px-4 py-2 bg-[#A32035] hover:bg-red-700 text-white rounded-lg text-sm"
                 >
                     Login to Order
                 </button>
