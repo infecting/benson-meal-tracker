@@ -2,8 +2,6 @@
 "use client";
 
 import FAQItem from "../../../components/FAQItem"; // ← adjusted import
-import Image from "next/image";
-import Link from "next/link";
 
 const faqs = [
   {
