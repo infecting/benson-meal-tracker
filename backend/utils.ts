@@ -269,3 +269,20 @@ export function getOrderFrequency(pastOrders: any): number {
         ? orders.length / (timeSpanDays / 7)
         : orders.length;
 }
+
+export function getWeeklySpend(pastOrders: any): number {
+    const orders = pastOrders.orders;
+    if (orders.length < 2) return moneySpent(pastOrders);
+
+    const dates = orders
+        .map((o) => new Date(o.pickup_datetime || o.order_local_time))
+        .sort((a, b) => a.getTime() - b.getTime());
+    const timeSpanDays =
+        (dates[dates.length - 1].getTime() - dates[0].getTime()) /
+        (1000 * 60 * 60 * 24);
+
+    const totalSpent = moneySpent(pastOrders);
+    return timeSpanDays > 0
+        ? (totalSpent / (timeSpanDays / 7))
+        : totalSpent;
+}

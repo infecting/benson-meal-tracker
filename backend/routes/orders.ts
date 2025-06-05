@@ -11,6 +11,7 @@ import {
     moneySpent,
     getAverageOrderValue,
     getUniqueItems,
+    getWeeklySpend,
 } from "../utils";
 import { Order } from "../database/schemas";
 
@@ -341,6 +342,7 @@ router.post("/getWrapped", async (req: Request, res: Response) => {
         let placeDist = getLocationDistribution(pastOrders);
         let avgOrderValue = getAverageOrderValue(pastOrders);
         let uniqueItems = getUniqueItems(pastOrders);
+        let weeklySpend = getWeeklySpend(pastOrders);
         res.json({
             place: frequentPlace.most,
             placeDist: placeDist,
@@ -348,7 +350,8 @@ router.post("/getWrapped", async (req: Request, res: Response) => {
             money: money / 100,
             hours: frequentHours,
             avgOrderValue: avgOrderValue / 100,
-            uniqueItems: uniqueItems
+            uniqueItems: uniqueItems,
+            weeklySpend: weeklySpend / 100
         });
     } catch (e) {
         console.log((e as Error).message);

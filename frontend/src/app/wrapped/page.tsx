@@ -15,6 +15,7 @@ interface DiningWrappedData {
     placeDist: any; // This should be place names, not hours
     avgOrderValue: number;
     uniqueItems: string[];
+    weeklySpend: number;
 }
 
 // Helper function to format hours data for the histogram
@@ -271,7 +272,7 @@ const WrappedPage: React.FC = () => {
                 <div className={`animate-fadeIn ${animationComplete ? 'delay-150' : 'opacity-0'}`}>
                     <div className="bg-white p-6 rounded-xl shadow-lg h-full">
                         <h3 className="text-xl font-semibold text-gray-800 mb-2">Average Order</h3>
-                        <p className="text-2xl font-bold text-blue-600">
+                        <p className="text-2xl font-bold text-green-600">
                             {new Intl.NumberFormat('en-US', {
                                 style: 'currency',
                                 currency: 'USD'
@@ -281,14 +282,17 @@ const WrappedPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Unique Items Card */}
+                {/* Weekly Spend Card */}
                 <div className={`animate-fadeIn ${animationComplete ? 'delay-300' : 'opacity-0'}`}>
                     <div className="bg-white p-6 rounded-xl shadow-lg h-full">
-                        <h3 className="text-xl font-semibold text-gray-800 mb-2">Unique Items</h3>
-                        <p className="text-2xl font-bold text-green-600">
-                            {wrappedData.uniqueItems?.length || 0}
+                        <h3 className="text-xl font-semibold text-gray-800 mb-2">Weekly Spend</h3>
+                        <p className="text-2xl font-bold text-blue-600">
+                            {new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD'
+                            }).format(wrappedData.weeklySpend || 0)}
                         </p>
-                        <p className="text-gray-500 text-sm mt-2">different items tried</p>
+                        <p className="text-gray-500 text-sm mt-2">average per week</p>
                     </div>
                 </div>
 
@@ -307,6 +311,17 @@ const WrappedPage: React.FC = () => {
                         <h3 className="text-xl font-semibold text-gray-800 mb-2">Top Order</h3>
                         <p className="text-2xl font-bold text-red-600">{wrappedData.order}</p>
                         <p className="text-gray-500 text-sm mt-2">your most ordered item</p>
+                    </div>
+                </div>
+
+                {/* Unique Items Card */}
+                <div className={`animate-fadeIn ${animationComplete ? 'delay-750' : 'opacity-0'}`}>
+                    <div className="bg-white p-6 rounded-xl shadow-lg h-full">
+                        <h3 className="text-xl font-semibold text-gray-800 mb-2">Unique Items</h3>
+                        <p className="text-2xl font-bold text-yellow-600">
+                            {wrappedData.uniqueItems?.length || 0}
+                        </p>
+                        <p className="text-gray-500 text-sm mt-2">different items tried</p>
                     </div>
                 </div>
             </div>
@@ -336,6 +351,9 @@ const WrappedPage: React.FC = () => {
                 }
                 .delay-600 {
                     animation-delay: 0.6s;
+                }
+                .delay-750 {
+                    animation-delay: 0.75s;
                 }
                 @keyframes fadeIn {
                     from { opacity: 0; transform: translateY(20px); }
