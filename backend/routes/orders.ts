@@ -75,7 +75,7 @@ router.post("/order", async (req: Request, res: Response) => {
 router.post("/getPastOrders", async (req: Request, res: Response) => {
     try {
         // Authenticate user first
-        await authenticateUser(req);
+        const user = await authenticateUser(req);
 
         let client = new MobileOrderClient(
             {
@@ -90,7 +90,9 @@ router.post("/getPastOrders", async (req: Request, res: Response) => {
                 sessionId: req.body.sessionId,
             }
         );
-        const pastOrders = await Order.find();
+        const pastOrders = await Order.find({
+            userId: user.userId,
+        });
         console.log(pastOrders);
         res.json(pastOrders);
     } catch (e) {
@@ -109,7 +111,9 @@ router.post("/yourOrders", async (req: Request, res: Response) => {
         // Authenticate user first
         const user = await authenticateUser(req);
 
-        const orders = await Order.find().sort({ createdAt: -1 });
+        const orders = await Order.find({
+            userId: user.userId,
+        }).sort({ createdAt: -1 });
 
         res.json(orders);
     } catch (error) {
