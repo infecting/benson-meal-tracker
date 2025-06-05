@@ -15,7 +15,7 @@ interface DiningWrappedData {
     placeDist: any; // This should be place names, not hours
     avgOrderValue: number;
     uniqueItems: string[];
-    weeklySpend: number;
+    orderFrequency: number; // Changed from weeklySpend to orderFrequency
 }
 
 // Helper function to format hours data for the histogram
@@ -285,14 +285,11 @@ const WrappedPage: React.FC = () => {
                 {/* Weekly Spend Card */}
                 <div className={`animate-fadeIn ${animationComplete ? 'delay-300' : 'opacity-0'}`}>
                     <div className="bg-white p-6 rounded-xl shadow-lg h-full">
-                        <h3 className="text-xl font-semibold text-gray-800 mb-2">Weekly Spend</h3>
+                        <h3 className="text-xl font-semibold text-gray-800 mb-2">Order Frequency</h3>
                         <p className="text-2xl font-bold text-blue-600">
-                            {new Intl.NumberFormat('en-US', {
-                                style: 'currency',
-                                currency: 'USD'
-                            }).format(wrappedData.weeklySpend || 0)}
+                            {wrappedData.orderFrequency?.toFixed(1) || 0}
                         </p>
-                        <p className="text-gray-500 text-sm mt-2">average per week</p>
+                        <p className="text-gray-500 text-sm mt-2">orders per week</p>
                     </div>
                 </div>
 
