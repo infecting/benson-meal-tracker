@@ -10,11 +10,11 @@ export const Navbar = ({ currentPath = "/" }) => {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-    const navItems = [
-        { name: 'Order', path: '/menu', icon: <CalendarCheck size={20} /> },
-        { name: 'My Orders', path: '/orders', icon: <ShoppingCart size={20} /> },
-        { name: 'Dining Wrapped', path: '/wrapped', icon: <TrendingUp size={20} /> },
-    ];
+const navItems = [
+    { name: 'Dining Wrapped', path: '/wrapped', icon: <TrendingUp size={20} /> },
+    { name: 'Order', path: '/menu', icon: <CalendarCheck size={20} /> },
+    { name: 'My Orders', path: '/orders', icon: <ShoppingCart size={20} /> },
+];
 
     const isActive = (path) => {
         return pathname === path || pathname?.startsWith(`${path}/`);
