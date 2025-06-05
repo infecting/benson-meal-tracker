@@ -9,6 +9,8 @@ import {
     getMostFrequentPlace,
     getOrderDistributionByHour,
     moneySpent,
+    getAverageOrderValue,
+    getUniqueItems,
 } from "../utils";
 import { Order } from "../database/schemas";
 
@@ -337,12 +339,16 @@ router.post("/getWrapped", async (req: Request, res: Response) => {
         let money = moneySpent(pastOrders);
         let frequentHours = getOrderDistributionByHour(pastOrders);
         let placeDist = getLocationDistribution(pastOrders);
+        let avgOrderValue = getAverageOrderValue(pastOrders);
+        let uniqueItems = getUniqueItems(pastOrders);
         res.json({
             place: frequentPlace.most,
             placeDist: placeDist,
             order: frequentOrder,
             money: money / 100,
             hours: frequentHours,
+            avgOrderValue: avgOrderValue / 100,
+            uniqueItems: uniqueItems
         });
     } catch (e) {
         console.log((e as Error).message);
