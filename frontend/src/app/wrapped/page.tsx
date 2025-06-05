@@ -275,7 +275,7 @@ const WrappedPage: React.FC = () => {
                             {new Intl.NumberFormat('en-US', {
                                 style: 'currency',
                                 currency: 'USD'
-                            }).format(wrappedData.avgOrderValue)}
+                            }).format(wrappedData.avgOrderValue || 0)}
                         </p>
                         <p className="text-gray-500 text-sm mt-2">per order</p>
                     </div>
@@ -285,7 +285,9 @@ const WrappedPage: React.FC = () => {
                 <div className={`animate-fadeIn ${animationComplete ? 'delay-300' : 'opacity-0'}`}>
                     <div className="bg-white p-6 rounded-xl shadow-lg h-full">
                         <h3 className="text-xl font-semibold text-gray-800 mb-2">Unique Items</h3>
-                        <p className="text-2xl font-bold text-green-600">{wrappedData.uniqueItems.length}</p>
+                        <p className="text-2xl font-bold text-green-600">
+                            {wrappedData.uniqueItems?.length || 0}
+                        </p>
                         <p className="text-gray-500 text-sm mt-2">different items tried</p>
                     </div>
                 </div>
